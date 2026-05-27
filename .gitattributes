@@ -1,0 +1,12 @@
+# Mapping/data/binary files — store byte-for-byte, never convert line endings.
+*.tsi  binary
+*.ncc  binary
+*.png  binary
+*.jpg  binary
+*.zip  binary
+*.pdf  binary
+
+# Source & docs — normalize to LF.
+*.py   text eol=lf
+*.md   text eol=lf
+*.html text eol=lf
