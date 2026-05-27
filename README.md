@@ -32,6 +32,6 @@ Requires Python 3 + Pillow (for the diagram scripts). Self-contained — reads o
 and some LED/VU outputs are pending hardware confirmation. See `HANDOFF.md` §8.
 
 ## License
-Not yet chosen — add the license of your choice. The mapping is original work; third-party
-reference mappings used during development are **excluded** from this repo (see `.gitignore`)
-and were studied only as format references.
+**GPL‑3.0** (see `LICENSE`) — © 2026 Garry Broeckling. The mapping is original work;
+third‑party reference mappings used during development are **excluded** from this repo
+(see `.gitignore`) and were studied only as format references. Security policy: `SECURITY.md`.

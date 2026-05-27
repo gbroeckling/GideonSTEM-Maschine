@@ -6,6 +6,8 @@
 # our own work:
 !/.gitignore
 !/.gitattributes
+!/LICENSE
+!/SECURITY.md
 !/README.md
 !/HANDOFF.md
 !/README_gideonSTEMsMaster.md
