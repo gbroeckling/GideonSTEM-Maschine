@@ -93,6 +93,17 @@ matches the working "Maschine ONE" reference. The Traktor TSI encoder is format-
 
 ---
 
+### Maschine MK1 port (same `.tsi` + `.ncc`)
+The build also patches the **`Maschine Controller`** (MK1) NCC section so one file set drives
+both controllers. MK1 sends the same transport CCs as MK2 (Play 108, Record 109, Grid 107,
+Loop 104, Prev./Next 105/106, Browse 87, Group A–H 80–83/91–94) and the display pages are
+written to MK1 too — so the only patch MK1 needs is the **same per-group pad re-channeling**
+(A→Ch03 … H→Ch09, B stays Ch01), done in the `MK1 PORT` block in `patch_ncc`. RGB color
+patches are MK2-only (MK1 is monochrome). MK1 has **no `<wheel id="Dial">`**, so the Dial-mode
+patch simply doesn't match it; knob-browse / Dial-load are unavailable on MK1 (documented).
+To extend other controllers, replicate this pattern on their NCC section (Mikro has 0 knobs —
+needs a redesigned, pad-centric layout, not a drop-in).
+
 ## 4. How to test (the shuttle workflow)
 There is **no Maschine on this build machine.** Testing happens on a **separate machine**;
 files move on a **USB key (drive `F:`)**.

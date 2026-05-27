@@ -1,8 +1,9 @@
 # GideonSTEM-Maschine
 
-A **Traktor Pro 4** controller mapping for the **Native Instruments Maschine MK2** —
-a 2-deck STEMS mixer + performance pad surface (loops, beatjump, remix, key, loop-roll,
-VU meter, transport) + FX control + browser/transport, generated from a Python build.
+A **Traktor Pro 4** controller mapping for the **Native Instruments Maschine MK2**
+(and **MK1** — same file set) — a 2-deck STEMS mixer + performance pad surface (loops,
+beatjump, remix, key, loop-roll, VU meter, transport) + FX control + browser/transport,
+generated from a Python build.
 
 **Live (alpha):** https://maps.djtechtools.com/mappings/22496
 

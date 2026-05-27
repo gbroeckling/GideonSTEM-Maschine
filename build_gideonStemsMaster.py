@@ -875,6 +875,36 @@ def patch_ncc(path):
         content = content[:g0] + blk + content[g1:]
         print(f"  [NCC] Group {letter} -> Ch{ch+1:02d}, Deck A=idx{ca}/Deck B=idx{cb}")
 
+    # --- MK1 PORT: re-channel the MK1 ("Maschine Controller") pads exactly like the MK2 so
+    # all 8 pad pages work with the UNCHANGED TSI. MK1 sends the same transport CCs (Play 108,
+    # Record 109, Grid 107, Loop 104, Prev./Next 105/106, Browse 87, Group A-H 80-83/91-94) and
+    # the display pages (stems + FX) are already written to MK1 above. MK1 pads are MONOCHROME
+    # (no RGB) so colors are skipped. MK1 has NO Dial/jog -> knob-browse and Dial-push-load are
+    # not available on MK1 (use a track-deck button workflow); documented as an MK1 limitation.
+    mk1s = content.find('<controller type="Maschine Controller">')
+    mk1e = content.find('<controller type="Maschine Controller MK2">')
+    if mk1s != -1 and mk1e != -1 and mk1s < mk1e:
+        seg1 = content[mk1s:mk1e]
+        MK1_CH = {'A': 2, 'C': 3, 'D': 4, 'E': 5, 'F': 6, 'G': 7, 'H': 8}   # B stays Ch01 (ch0)
+        MK1_NXT = {'A': 'B', 'C': 'D', 'D': 'E', 'E': 'F', 'F': 'G', 'G': 'H', 'H': None}
+        nre = 0
+        for L, ch in MK1_CH.items():
+            g0 = seg1.find(f'<group name="Pad Page {L}"')
+            nxt = MK1_NXT[L]
+            g1 = seg1.find(f'<group name="Pad Page {nxt}"', g0) if nxt else seg1.find('</groups>', g0)
+            if g0 == -1 or g1 == -1:
+                continue
+            blk = seg1[g0:g1]
+            blk, c = re.subn(r'(<pad subtype="trigger"[^>]*>\s*<note>\d+</note>\s*<channel>)0(</channel>)',
+                             rf'\g<1>{ch}\g<2>', blk)
+            seg1 = seg1[:g0] + blk + seg1[g1:]; nre += c
+        content = content[:mk1s] + seg1 + content[mk1e:]
+        print(f"  [NCC] MK1 pads re-channeled per group (A,C-H -> Ch03-09; {nre} pads); B stays Ch01")
+        # MK1 template index -> 0 (Full Mix is page index 0 in _ALL_PAGES, so MK1 boots to it too)
+        content, _mi = re.subn(
+            r'(<controller type="Maschine Controller">\s*<wrapmode>0</wrapmode>\s*<current_index>)\d+(</current_index>)',
+            r'\g<1>0\g<2>', content)
+
     # --- Physical Group A-H buttons: each a distinct color (matches its page) ---
     mk3sec = content.find('<controller type="Maschine Controller MK3">')
     seg = content[mk2sec:mk3sec]
@@ -930,7 +960,8 @@ def patch_ncc(path):
     # Transport/master buttons were NCC 'toggle' (latches 127/0); with a Traktor Toggle mapping
     # that needs TWO presses per action. Switch them to 'gate' so each press fires once.
     for bid in ['Play', 'Restart', 'Rec', 'Grid', 'Enter', 'Push', 'StepL', 'StepR',
-                'MasterL', 'MasterR', 'Browse']:
+                'MasterL', 'MasterR', 'Browse',
+                'Record', 'Loop', 'Prev.', 'Next']:   # MK1 transport ids (same CCs as MK2)
         content = re.sub(
             rf'(<button version="1" id="{bid}">(?:(?!</button>).)*?<behavior onIfDown="on">)toggle(</behavior>)',
             r'\g<1>gate\g<2>', content, flags=re.S)

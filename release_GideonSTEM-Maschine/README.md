@@ -48,7 +48,7 @@ and uses **Deck C** for the remix‑cell grid (Group D).
 ---
 
 ## 2. Requirements
-- **Native Instruments Maschine MK2** hardware.
+- **Native Instruments Maschine MK2** (full RGB) **or Maschine MK1** (see *Maschine MK1* below).
 - **NI Controller Editor** (ships with Maschine software) — used to load the `.ncc`
   controller template so the MK2 sends the correct MIDI.
 - **Traktor Pro 4** (developed/tested on Traktor Pro 4; stems require Traktor Pro 3 or newer).
@@ -229,6 +229,19 @@ has both an **In‑Port and Out‑Port** assigned to the MK2.
 
 ---
 
+## 11b. Maschine MK1
+The **same `.tsi` and `.ncc`** also drive the original **Maschine MK1** — load the `.ncc`
+in Controller Editor and select your MK1. The MK1 has the same control layout (16 pads,
+8 display knobs/buttons, 8 Group buttons), so pad pages A–H, the stems mixer, FX, and
+transport (Play, Record, Grid, Loop=restart, Prev./Next=beatjump, Browse) all work.
+
+**MK1 differences (hardware limits):**
+- **Monochrome pads** — the MK1 has no RGB, so pad/VU *colors* don't render (the functions
+  still work; the Group G meter lights pads on/off rather than in color).
+- **No Dial/jog** — the knob-driven browser scroll and the Dial-push load aren't available
+  on the MK1, and it has no Enter/Master buttons. Use Traktor's keyboard/other controls to
+  scroll/load, or remap a free MK1 button. (MK1 is **alpha** and untested on hardware so far.)
+
 ## 12. Credits
 **This build is 100% original** — as of v0.2 it contains **no third‑party mapping data**.
 It was developed by reverse‑engineering the Traktor `.tsi` format and studying several
@@ -266,3 +279,6 @@ please get in touch and it will be corrected.)*
 - **v0.2‑alpha** — FX layer rebuilt as an original `Maschine MK2 FX` device (all 4 FX
   units on Group F/G/H); removed the last third‑party device → **100% original**, and
   cleared the CC003/CC087 mapping conflicts.
+- **v0.3‑alpha** — **Maschine MK1 support** from the same `.tsi`/`.ncc` (MK1 pad pages
+  re‑channeled to match; transport + stems + FX work). MK1 caveats: monochrome pads, no
+  Dial. MK1 untested on hardware.
