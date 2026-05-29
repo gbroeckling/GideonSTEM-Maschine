@@ -4,15 +4,17 @@
 state*, how to build/test/publish, the architecture decisions that actually matter, and
 the open issues. Other docs in this folder are older and partly stale — see §10.
 
-Last updated: 2026-05-26. Current release: **v0.2-alpha** (100% original — no third-party
+Last updated: 2026-05-28. Current release: **v0.4-alpha** (100% original — no third-party
 mapping data), live at **https://maps.djtechtools.com/mappings/22496**.
 
 ---
 
 ## 1. What this project is
 A **Traktor Pro 4** controller mapping for the **Native Instruments Maschine MK2** that
-turns it into a 2-deck STEMS mixer + performance pad surface (loops, beatjump, remix,
-key, loop-roll, VU meter, transport) + browser/transport controller.
+turns it into a 2-deck STEMS mixer + a **24-page** performance pad surface (8 Groups × 3
+layers: stems, loops, beatjump, remix, key, tone-play, loop-roll, phrase-jump, loop
+recorder, an FX selector, and a two-voice drum **Pattern Player** on FX3/FX4) + 4-unit FX
+control + browser/transport controller.
 
 Two deliverables, both required by the end user:
 - `gideonSTEMsMaster.tsi` — the Traktor mapping (import in Controller Manager).
@@ -62,16 +64,32 @@ Deck B = 4–7, C = 8–11, D = 12–15. Use **one Focus device**. **Do NOT** sp
 
 ---
 
-## 3. Pad paging is CHANNEL-BASED (not modifiers)
-This is the central architecture decision and it contradicts the older notes.
+## 3. Paging is HYBRID: channel picks the GROUP, Mod#2 picks the LAYER
+This is the central architecture decision. There are two orthogonal axes:
 
-- The 16 pads are **re-channeled per Group page**. The hardware's **native Group A–H
-  switching** changes which MIDI channel the pads send on, and Traktor listens per channel:
-  - A = Ch03 · B = Ch01 · C = Ch04 · D = Ch05 · E = Ch06 · F = Ch07 · G = Ch03+Ch01 (VU) · H = Ch09
+**Axis 1 — Group (A–H), CHANNEL-BASED.** The 16 pads are **re-channeled per Group page**.
+The hardware's **native Group A–H switching** changes which MIDI channel the pads send on,
+and Traktor listens per channel:
+  - A = Ch03 · B = Ch01 · C = Ch04 · D = Ch05 · E = Ch06 · F = Ch07 · G = Ch08 · H = Ch09
 - Each Group also switches the on-screen **display page** (they move together).
-- A **modifier-based** paging approach was tried earlier and **abandoned** — it broke 7 of 8
-  pad pages on hardware. Do not resurrect it without a very good reason. (The stale notes in
-  §10 describe that dead approach as if current — ignore those sections.)
+- An earlier attempt to use a **modifier for the *Group* page** was abandoned — it broke 7 of
+  8 pad pages on hardware. Groups stay channel-based. (The §10 "modifier paging" notes describe
+  that dead *group*-paging approach — ignore them.)
+
+**Axis 2 — Layer (Base / Scene / Pattern), MODIFIER-BASED (Mod#2).** On top of the channel
+group, **Traktor Modifier #2** selects one of three layers, gating each pad mapping:
+  - **Base** = Mod#2 == 0 (Scene & Pattern off) → pages A–H
+  - **Scene** = Mod#2 == 1 (Scene button CC112, NCC `behavior="toggle"` + TSI Hold) → A2–H2
+  - **Pattern** = Mod#2 == 2 (Pattern button CC113) → A3–H3
+- One modifier = mutually exclusive layers; Scene and Pattern can never both fire.
+- Pad mappings are gated via `_gate_list(fn(), MOD2, layer)` in `perf_map` (Group G self-gates
+  inside `_fxselect_mappings`). The Pattern button also auto-arms the drum bus (Deck D→FX3/FX4,
+  FX3/FX4 on) so the Pattern Player is audible immediately.
+- **The display pages do NOT change per layer** — there are 8 fixed `<page>` blocks in the NCC,
+  shared across all three layers. The stems device (Ch02) is ungated, so screen knobs keep
+  driving stems/FX in every layer; only the pads switch.
+- This works because the modifier gates the *pad* mappings (not the group channel switch), so it
+  does not re-break the channel-based group paging that the abandoned approach broke.
 
 ### `handleGroupControls` — the key tradeoff
 The NCC flag `<handleGroupControls/>` puts the Group A–H buttons under MIDI control (which is
@@ -117,21 +135,34 @@ files move on a **USB key (drive `F:`)**.
 ---
 
 ## 5. Pad pages & controls (ground truth = the build script)
-Pad page note/channel/TID details live in `build_gideonStemsMaster.py` functions
-(`_stems_pad_mappings`, `_loops_mappings`, `_beatjump_mappings`, `_remixcell_mappings`,
-`_pitchplay_mappings`, `_looproll_mappings`, `_vu_mappings`, `_transport_mappings`,
-`_transport_nav_mappings`). Summary:
+The authoritative map of which builder feeds which group/layer is the **`perf_map`
+assembly** (each line is `_gate_list(fn(), MOD2, layer)`). 24 pad pages total.
 
-| Group | Pads | Channel | TID |
+**Base layer (Mod#2==0):** `_stems_pad_mappings` (A), `_loops_mappings` (B),
+`_beatjump_mappings` (C), `_remixcell_mappings` (D), `_pitchplay_mappings` (E),
+`_loopmem_mappings` (F = loop station), `_fxselect_mappings(0)` (G = FX1 selector),
+`_transport_mappings` (H).
+
+| Group | Base-layer pads | Channel | TID |
 |---|---|---|---|
 | A | Stem mute + filter-on (per deck) | Ch03, notes 12–27 | 259 / 250 |
 | B | Fixed loops 1/8…16 | Ch01, notes 24–39 | 2317 |
 | C | Beatjump ±4/±8/±16/±32 | Ch04, notes 36–51 | 2380 |
 | D | Remix Deck C 4×4 grid | Ch05, notes 48–63 | 600/616/632/648 +cell |
 | E | Key shift −4…+3 (0=reset) | Ch06, notes 60–75 | 402 |
-| F | Loop roll 1/16…8 | Ch07, notes 72–87 | 2317 |
-| G | Main-output VU (LED out) | Ch03+Ch01, notes 84–99 | 2704/2705 |
+| F | **Loop station** — Capture A/B/C/D + recall remix cells | Ch07, notes 72–87 | 2002 / 600+ |
+| G | **FX1 selector** — load effect + wet-while-held (16 effects) | Ch08, notes 84–99 | 362 / 365 / 366-368 |
 | H | Play/Cue/Sync/Flux | Ch09, notes 96–111 | 100/206/125/2350 |
+
+**Scene layer (Mod#2==1):** `_stemfx_a2` (A2), `_looproll_b2` (B2), `_phrasejump_c2` (C2),
+`_remix_d2` (D2), `_toneplay_e2` (E2), `_looprec_f2` (F2, experimental), `_fxselect_mappings(1)`
+(G2), `_transport_h2` (H2). **Pattern layer (Mod#2==2):** `_patternctrl_mappings(2,…)` (A3=FX3),
+`_patternctrl_mappings(3,…)` (B3=FX4), `_drummix_c3` (C3), `_toneplay_d3` (D3),
+`_sounddesign_e3` (E3), `_gate_f3` (F3), `_macros_g3` (G3), `_patternpick_h3` (H3).
+
+> **Dead code:** `_looproll_mappings` and `_vu_mappings` are NO LONGER in `perf_map` (loop-roll
+> moved to B2; the VU page was replaced by the G FX selector). They remain in the file but are
+> never assembled — safe to delete in a cleanup pass.
 
 Transport/nav (Ch01 CCs): Play 108, Restart 104 (jumps start on **A and B**), Rec 109,
 Grid 107 (Toggle Last Focus 2588), Step 105/106 (beatjump ∓4), Tempo 3 (Load Deck A 3076),
@@ -146,12 +177,16 @@ hex constants. Don't hand-build these.
 ---
 
 ## 6. Diagrams (the listing image)
-- `make_layout.py` → `master.png` (clean control map), `padA..H.png` (8 pad maps),
-  `cheatsheet.png` (composite).
-- `annotate_template.py` → `template_labeled.png` — writes labels onto the clean MK2
-  template (`images/Screenshot 2026-05-26 221606.png`) via green-region auto-detection.
-- `listing_image.png` = annotated control map + 8 pad maps; this is what's on the DJTT listing.
-Regenerate: `python3 make_layout.py && python3 annotate_template.py`, then re-composite.
+- `make_layout.py` writes everything into `diagrams_out/`: `control_map.png`, 24 pad maps
+  (`pad_A.png`…`pad_H.png` base, `pad_A2`…`pad_H2` Scene, `pad_A3`…`pad_H3` Pattern), 8 screen
+  maps (`screen_A`…`screen_H`), per-layer cheatsheets, and **`layout_guide.png`** (the full
+  composite = control map + all 24 pad maps + 8 screens). All pad/label data is transcribed
+  from `build_gideonStemsMaster.py`; if you change a page in the build, update its label list
+  in `make_layout.py` (the `page(...)` calls / `SCREENS` dict).
+- Regenerate: `python3 make_layout.py`, then copy `diagrams_out/*` into
+  `release_GideonSTEM-Maschine/diagrams/`.
+- `layout_guide.png` is the DJTT listing image. (`annotate_template.py` is the older
+  template-annotation path; the data-driven `make_layout.py` above is now the primary one.)
 
 ---
 
@@ -172,13 +207,25 @@ NOT stored here). Authenticated session uses `djtt/cookies.txt` + `curl --ssl-no
 ---
 
 ## 8. Open issues (alpha)
-- **FX layer (Group F/G/H)** — rebuilt original in v0.2; built from proven CMAD helpers and
-  the verified FX-unit-in-deck-field encoding, but **not yet hardware-confirmed**. Verify On/
-  Dry-Wet/Knobs/Buttons for all 4 units. (Was hardware-untested at publish time.)
-- **Group G VU movement** — metering output signature is in place (CtrlType=LED, Inter=Output,
-  reso=0x3d800000, per-segment bands); needs hardware confirmation with the Out-Port assigned.
-- **Custom A–H button colors** — not possible without `handleGroupControls`, which breaks
-  native paging (§3). Would require migrating paging to modifiers across pads + display.
+- **Group G / G2 FX-select pads — NOT working yet (TOP FIX).** Pressing a G pad should load the
+  effect into FX1 (362), set params, route it (321) + switch the unit on (369), and swell the
+  wet (365). The select + on/route do not fire together reliably. Root cause (per session notes):
+  a **timing race** when select + route + unit-on fire on the same press — NOT an encoding bug
+  (proven by "works rarely"). Current build ("Plan B") removed route/on from the pad and pre-arms
+  them via the **Solo button (CC118 = FX1 engage)**, leaving the pad to only select + wet — still
+  not confirmed working. Garry's latest direction: fire the on/route + select **on Group-G page
+  select** instead of on the pads. Blocker to verify first: with `handleGroupControls` removed
+  (§3), the Group buttons do native switching and may NOT emit a host-mappable CC — confirm in
+  Traktor's Controller Manager (Learn) whether Group G sends a CC before wiring it. See the
+  `_fxselect_mappings`, `_cmad_wet_gate`, and the CC118 block in `perf_map`.
+- **Drum Pattern Player (A3–H3)** — routing/auto-arm in place; per-pad pattern/vol/pitch values
+  built from verified FX-unit controls but want a full hardware pass (esp. 365 = Decay vs Volume
+  label, and the extrapolated pattern-position floats in `_cmad_fxpattern`).
+- **FX screen pages (F/G/H)** — original, from proven CMAD helpers + verified FX-unit-in-deck-field
+  encoding; verify On/Dry-Wet/Knobs/Buttons for all 4 units on hardware.
+- **Custom A–H button colors** — not possible without `handleGroupControls`, which breaks the
+  native *group* switching (§3, Axis 1). Layers use a modifier; the group still needs the channel
+  switch, so custom colors would still require re-architecting group paging.
 - **Grid / Play LEDs** — output mappings present (Grid lit on Deck B focus; Play green on play);
   verify on hardware.
 - **Stems Full Mix default** — handled via page order; confirm it boots correctly on hardware.
