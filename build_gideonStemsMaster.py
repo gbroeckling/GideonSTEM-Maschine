@@ -421,6 +421,12 @@ def _gate_list(mappings, modid, val):
     """Apply a modifier gate to every (label, type, tid, cmad) tuple in a mapping list."""
     return [(lbl, typ, tid, _gate(cmad, modid, val)) for (lbl, typ, tid, cmad) in mappings]
 
+def _gate_list2(mappings, m1, v1, m2, v2):
+    """Apply a TWO-modifier AND-gate to every (label, type, tid, cmad) tuple. Uses `_gate2`
+    (slot 1 @52 / slot 2 @64) so the mapping fires only when both Mod m1==v1 AND Mod m2==v2.
+    (`_gate2` itself is defined below near the FX-on helpers; resolved at call time.)"""
+    return [(lbl, typ, tid, _gate2(cmad, m1, v1, m2, v2)) for (lbl, typ, tid, cmad) in mappings]
+
 def _looproll_b2_mappings():
     """B2 — the Scene-shifted layer of page B (Ch01 notes 24-39, the SAME pads as the B loops
     layer). Fixed-size loop ROLL, sizes 1/16..8 beats (indices 1-8); bottom half Deck B, top
@@ -648,16 +654,49 @@ def _toneplay_e2_mappings():
             m.append((_note_lbl(n, 5), 0, 402, _cmad_keyplay(deck, s)))
     return m
 
+def _cmad_looprec_size(value):
+    """Loop Recorder Size (TID 281, EnumInCommand<LoopRecorderSize>): 0=4 beats, 1=8, 2=16, 3=32.
+    Global target (deck=0), Direct interaction. Mirrors the verified Effect-Selector (TID 362)
+    Enum-Direct CMAD shape: HasValueUI=1 (@36), ValueUIType=1 combo (@40), SetValue=enum-index
+    (@44), LedMaxRange=enum-count (@88, =4). Plain `_cmad_btn` Direct without these fields was
+    silently ignored by Traktor for the previous F2 — same failure mode as the float-without-
+    HasValueUI bug fixed in v0.2 for FX params (see `_cmad_fxval` comment)."""
+    b = bytearray(_cmad_btn(0, 3))      # Direct, deck=0 (global)
+    b[36:40] = struct.pack('>I', 1)     # HasValueUI = 1
+    b[40:44] = struct.pack('>I', 1)     # ValueUIType = 1 (combo)
+    b[44:48] = struct.pack('>I', value) # SetValue = enum index 0..3
+    b[88:92] = struct.pack('>I', 4)     # LedMaxRange = enum count (4 sizes)
+    return bytes(b)
+
 def _looprec_f2_mappings():
-    """F2 (page F pads, Ch07 notes 72-87): Traktor LOOP RECORDER. EXPERIMENTAL — these TIDs appear
-    in references but sparsely. Global engine (deck field 0). Four controls, repeated on each row
-    for two-hand reach: Record/Play state (280, Direct), Size- (281, Dec), Size+ (281, Inc),
-    Undo/Del (282, Direct)."""
+    """F2 (page F pads, Ch07 notes 72-87): Traktor LOOP RECORDER — global engine.
+    Per cmdr KnownCommands.cs (authoritative): 280=Record (OnOff), 281=Size (enum 0/1/2/3 =
+    4/8/16/32 beats), 282=Dry/Wet (Float), 283=Play/Pause (OnOff), 284=Delete (Trigger),
+    287=Undo/Redo (Trigger). All TargetType.Global → deck field = 0.
+
+    Layout (note->pad: 72=p1 … 87=p16, bottom row = p1-4, top row = p13-16):
+      pads 13-16  (notes 84-87)  SIZE       :  4  /  8  / 16  / 32  beats  (Direct enum, 281)
+      pads  9-12  (notes 80-83)  DRY/WET    :  0% / 33% / 66% / 100%        (Float Direct, 282)
+      pads  5-8   (notes 76-79)  TRANSPORT  :  Rec / Play / Undo / Delete   (mirror of bottom)
+      pads  1-4   (notes 72-75)  TRANSPORT  :  Rec / Play / Undo / Delete   (two-hand reach)
+    Interactions: 280/283 OnOff -> Toggle(1) (press flips state); 284/287 Trigger -> Direct(3)
+    (single-fire on press); 281 Size -> Direct with enum index; 282 Dry/Wet -> Float Direct via
+    `_cmad_fxval(0, v)` (HasValueUI=1, ValueUIType=2 — REQUIRED for Float TIDs, the previous
+    `_cmad_btn` encoding had neither set so Traktor was silently ignoring the wet set).
+    Same pads as page F (loop station) — F is Mod#2==0, F2 is Mod#2==1 (Scene)."""
     m = []
-    ctrls = [(280, 3), (281, 6), (281, 5), (282, 3)]   # Rec/Play, Size-, Size+, Undo
-    for row_base in (72, 76, 80, 84):
-        for i, (tid, inter) in enumerate(ctrls):
-            m.append((_note_lbl(row_base + i, 6), 0, tid, _cmad_btn(0, inter)))
+    # Top row: SIZE 4/8/16/32 beats (pads 13-16)
+    for i, sz in enumerate((0, 1, 2, 3)):
+        m.append((_note_lbl(84 + i, 6), 0, 281, _cmad_looprec_size(sz)))
+    # Row 2: DRY/WET 0/33/66/100% (pads 9-12)
+    for i, wet in enumerate((0.0, 0.33, 0.66, 1.0)):
+        m.append((_note_lbl(80 + i, 6), 0, 282, _cmad_fxval(0, wet)))
+    # Rows 3 + 1: transport mirrored for two-hand reach (Rec, Play, Undo, Delete)
+    for row_base in (72, 76):
+        m.append((_note_lbl(row_base + 0, 6), 0, 280, _cmad_btn(0, 1)))   # Record (Toggle)
+        m.append((_note_lbl(row_base + 1, 6), 0, 283, _cmad_btn(0, 1)))   # Play/Pause (Toggle)
+        m.append((_note_lbl(row_base + 2, 6), 0, 287, _cmad_btn(0, 3)))   # Undo/Redo (Trigger)
+        m.append((_note_lbl(row_base + 3, 6), 0, 284, _cmad_btn(0, 3)))   # Delete (Trigger)
     return m
 
 def _transport_h2_mappings():
@@ -699,6 +738,22 @@ def _patternpick_h3_mappings():
     for base, unit in ((96, 2), (104, 3)):   # bottom=FX3, top=FX4
         for i in range(8):
             m.append((_note_lbl(base + i, 8), 0, 367, _cmad_fxpattern(unit, i)))
+    return m
+
+def _patternpick_h3_oneshot_mappings():
+    """H3 ONE-HIT OVERLAY — fires only when Solo is engaged (Mod#3==1) on the Pattern layer.
+    Same 16 pads as `_patternpick_h3_mappings`, but each pad ALSO fires Play (370) with Hold
+    interaction on the matching voice (FX3 bottom 8, FX4 top 8). Combined with the default
+    pattern-select (still active under Mod#2==2), a tap = re-select the pattern + Play-press
+    (which re-fires the pattern from step 1); release = Mute. This is the closest 'one-hit'
+    feel Traktor offers — the FX-Unit mode switch (Single/Group/Pattern Player) itself is NOT
+    MIDI-mappable, but Btn1=Play behaves as a trigger inside Pattern Player so each press
+    restarts playback. Solo's existing FX1 arm role is unchanged — engaging Solo in the
+    Pattern layer will also route+arm FX1 (harmless if FX1 has no effect loaded)."""
+    m = []
+    for base, unit in ((96, 2), (104, 3)):   # bottom=FX3, top=FX4
+        for i in range(8):
+            m.append((_note_lbl(base + i, 8), 0, 370, _cmad_btn(unit, 2)))   # Play, Hold
     return m
 
 def _cmad_fxval(unit, value):
@@ -912,7 +967,7 @@ def _transport_nav_mappings():
         (cc(98),  0, 3328, _scroll(-1)),               # Master L -> Browser TREE select up (browse folders)
         (cc(99),  0, 3328, _scroll(1)),                # Master R -> Browser TREE select down (browse folders)
         (cc(108), 1, 100,  _cmad_led_out(-1)),         # Play LED  -> lit (green) when focused deck playing
-        (cc(109), 1, 2058, _cmad_led_out(0)),          # Rec LED   -> lit (red) when recording
+        (cc(109), 1, 2056, _cmad_led_out(0)),          # Rec LED   -> follows Audio Recorder state (2056 is BOTH input AND output per cmdr; 2058 was wrong)
         (cc(107), 1, 9,    _focus_led()),              # Grid LED  -> lit when Deck A is focused
         (cc(111), 0, 8194, _cmad_btn(0, 1)),           # Note Repeat -> Cruise (Traktor's Auto-DJ) on/off (Toggle)
         (cc(111), 1, 8194, _cmad_led_out(0)),          # Note Repeat LED -> lit only while Cruise is running
@@ -1486,6 +1541,17 @@ def patch_ncc(path):
         r'\g<1>toggle\g<2>', content)
     print(f"  [NCC] Scene button -> toggle (restored to working state) ({ns} buttons)")
 
+    # GroupG button (CC93): latch its MIDI behavior so pressing Group G ARMS FX1 (route A+B,
+    # unit on) for the duration of the G "page" and a second tap disarms it. Native group
+    # paging is firmware-level and is independent of gate/toggle MIDI behavior, so this does
+    # NOT disturb page switching for any group. Pair with the perf_map CC93 arm below (Hold
+    # interaction = on while the button's MIDI state is on, matching the Scene/Pattern/Solo recipe).
+    content, ngg = re.subn(
+        r'(<button version="1" id="GroupG">\s*<controller>93</controller>'
+        r'(?:\s*<[^>]+>[^<]*</[^>]+>)*?\s*<behavior onIfDown="on">)(?:gate|toggle)(</behavior>)',
+        r'\g<1>toggle\g<2>', content)
+    print(f"  [NCC] GroupG button -> toggle (FX1 arm latch on G page) ({ngg})")
+
     print(f"  [NCC] Size: {original_len:,} -> {len(content):,} bytes")
     return content
 
@@ -1541,6 +1607,11 @@ perf_map = (
             + _gate_list(_sounddesign_e3_mappings(), MOD2, 2)        # E3 sound design (Ch06)
             + _gate_list(_gate_f3_mappings(), MOD2, 2)               # F3 gate & volume (Ch07)
             + _gate_list(_macros_g3_mappings(), MOD2, 2)             # G3 macros (Ch08)
+            # H3 ONE-HIT OVERLAY: when Solo is engaged (Mod#3==1) on the Pattern layer, each H3
+            # pad ALSO fires Play (370 Hold) so a tap re-fires the pattern (press = play from
+            # step 1, release = mute). Default pattern picker above stays active, so the pad still
+            # selects which pattern is queued; the overlay just adds the press-to-trigger.
+            + _gate_list2(_patternpick_h3_oneshot_mappings(), MOD2, 2, MOD3, 1)  # H3 one-hit (Solo)
             # === hardware controls (not pad pages) — ungated, active in all layers ===
             + _browse_mappings() + _transport_nav_mappings()
             # Mute button (CC119) = toggle-mute ALL stem slots of decks A-D (TID 259, level-preserving).
@@ -1568,6 +1639,14 @@ perf_map = (
                ("Ch01.CC.118", 0, 369, _cmad_fxon(0)),    # FX1 unit on
                # (FX1 wet is no longer forced full by Solo — the G pad swell owns the wet so it can
                #  ramp up and freeze/hold while engaged. Solo just holds the route + unit-on.)
+               # FX1 ENGAGE on GROUP G page-select (CC93). Same Hold-while-on recipe as Solo, paired
+               # with the NCC GroupG behavior=toggle patch above so the press LATCHES: tap G to enter
+               # the page AND arm FX1 (route A+B + unit on); tap G again to disarm. This is the v0.5
+               # FX-pad fix: select stays on the pad, the on/route fires from the page button so it
+               # can never collide with the select (page change happens before any pad press).
+               ("Ch01.CC.093", 0, 321, _cmad_fxon(0)),    # route deck A -> FX1
+               ("Ch01.CC.093", 0, 321, _cmad_fxon(1)),    # route deck B -> FX1
+               ("Ch01.CC.093", 0, 369, _cmad_fxon(0)),    # FX1 unit on
                # Volume button (CC7) = "volume mode" while latched (Mod#4=1): the Dial becomes the
                # focused deck's channel volume (incremental). When off, the Dial keeps its browse /
                # Deck-D roles. On Page F the Volume light stays off (hardware), so the top knob keeps
@@ -1578,7 +1657,17 @@ perf_map = (
                ("Ch01.CC.101", 0, 3200, _gate2(bytes(_BROWSE_SCROLL), MOD2, 0, MOD4, 0)),
                ("Ch01.CC.101", 0, 3200, _gate2(bytes(_BROWSE_SCROLL), MOD2, 1, MOD4, 0)),
                ("Ch01.CC.101", 0, 102,  _gate2(_cmad_voldial(3), MOD2, 2, MOD4, 0)),
-               ("Ch01.CC.101", 0, 102,  _gate(_cmad_voldial(-1), MOD4, 1))])
+               ("Ch01.CC.101", 0, 102,  _gate(_cmad_voldial(-1), MOD4, 1)),
+               # Erase (CC110, NCC behavior=toggle = latched): SYNC-ALL toggle. First tap = set
+               # focused deck as Tempo Master (2293 Trigger) + Sync ON for all 4 decks (125 OnOff,
+               # Hold = on while toggle is on). Second tap = MIDI 0 -> all 4 syncs OFF (Hold release).
+               # LED follows Deck A sync state (proxy for "all 4 synced") via 125 OUTPUT.
+               ("Ch01.CC.110", 0, 2293, _cmad_btn(-1, 3)),   # Set focused as Tempo Master (Trigger)
+               ("Ch01.CC.110", 0, 125,  _cmad_btn(0, 2)),    # Deck A Sync (Hold)
+               ("Ch01.CC.110", 0, 125,  _cmad_btn(1, 2)),    # Deck B Sync (Hold)
+               ("Ch01.CC.110", 0, 125,  _cmad_btn(2, 2)),    # Deck C Sync (Hold)
+               ("Ch01.CC.110", 0, 125,  _cmad_btn(3, 2)),    # Deck D Sync (Hold)
+               ("Ch01.CC.110", 1, 125,  _cmad_led_out(0))])  # Erase LED -> Deck A sync state
 devi_loops = build_device_raw("Maschine MK2 Performance", 0, perf_map)
 print(f"  Performance: {len(perf_map)} mappings across pad pages A-H")
 
