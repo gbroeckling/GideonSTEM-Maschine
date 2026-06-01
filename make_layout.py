@@ -230,70 +230,179 @@ def screenpage(group):
         ctext(d,x+bw/2,288,knobs[i].split("\n"),font(13,True),"#fff",lh=15)
     im.save(f"{OUT}/screen_{group}.png"); return im
 
-# ---------------- CONTROL MAP (master) ----------------
+# ---------------- CONTROL MAP / DECK OVERVIEW (high-res, hardware-positioned, every functional
+# button labeled with its CURRENT v0.6-alpha role) ----------------
 def control_map():
-    W,H=1340,1020
-    im=Image.new("RGB",(W,H),BG); d=ImageDraw.Draw(im)
-    ctext(d,W/2,30,"GideonSTEM-Maschine — Maschine MK2 control map (ALPHA v0.6)",font(26,True),ACC)
-    ctext(d,W/2,60,"Group A-H = pick the page  ·  Scene / Pattern = pick the layer  ·  top pads 9-16 = Deck A · bottom 1-8 = Deck B",font(14),SUB)
+    """High-resolution MK2 deck overview. Hardware layout matches the real Maschine MK2:
+    top row = BROWSE/SAMPLING + two displays + transport-side buttons + DIAL; middle = display
+    b1-b8 / k1-k8; lower-left = GROUP A-H, LAYER+UTILITY buttons, TRANSPORT buttons; lower-right
+    = 4x4 pads. Every button that has a distinct mapped function carries its v0.6 label."""
+    # Big canvas so the rendered image stays sharp when djtt scales it down for the listing hero.
+    W, H = 3200, 2200
+    im = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(im)
 
-    key(d,40,95,150,46,"BROWSE","toggle browser",fill="#2a2d36",tcol=ACC)
-    key(d,40,150,150,40,"SAMPLING","(unused)",scol="#6b7280")
-    key(d,40,198,70,36,"<","",fill="#2a2d36"); key(d,120,198,70,36,">","",fill="#2a2d36")
+    # ---- header ----
+    ctext(d, W/2, 60, "GideonSTEM-Maschine  —  Maschine MK2 control map (ALPHA v0.6)",
+          font(56, True), ACC)
+    ctext(d, W/2, 116, "Group A-H = pick the page  ·  Scene / Pattern = pick the layer  ·  top pads 9-16 = Deck A · bottom pads 1-8 = Deck B",
+          font(26), SUB)
 
-    rr(d,215,95,500,150,"#0c1a12",outline="#2c5",wd=2,r=8)
-    ctext(d,465,135,["LEFT  +  RIGHT  DISPLAY"],font(15,True),"#7fe3a8")
-    ctext(d,465,166,["boots to 'Stems Full Mix'"],font(13),"#5fb98a")
-    ctext(d,465,196,["screen layout follows the Group button (see screen maps)"],font(11),"#4f9a73")
+    # ---- BROWSE / SAMPLING / arrows (top-left column) ----
+    key(d, 80, 200, 320, 90, "BROWSE", "toggle browser view",
+        fill="#2a2d36", tcol=ACC, r=14)
+    key(d, 80, 310, 320, 90, "SAMPLING", "(unused — free button)",
+        fill="#2a2d36", scol="#6b7280", r=14)
+    key(d, 80, 420, 150, 70, "<",  "tree up",   fill="#2a2d36", r=12)
+    key(d, 250, 420, 150, 70, ">", "tree down", fill="#2a2d36", r=12)
+    ctext(d, 240, 510, "(master < / >  =  browser tree)", font(20), SUB)
 
-    key(d,745,95,80,46,"VOL","master")
-    key(d,835,95,80,46,"SWING","A/B target  (LED on = A)",tcol=ACC,scol=TXT)
-    key(d,925,95,80,46,"TEMPO","Load Deck A",tcol=ACC)
-    d.ellipse([1050,95,1170,215],fill="#2a2d36",outline=ACC,width=3)
-    ctext(d,1110,140,["DIAL"],font(17,True),ACC)
-    ctext(d,1110,162,["turn = browse / volume / SKIP","press+hold = SWING-SKIP engage"],font(10),SUB)
-    key(d,745,155,150,40,"< / >  (master)","browser tree select",tcol=TXT)
-    key(d,905,155,90,40,"ENTER","Load Deck B",tcol=ACC)
+    # ---- displays (centered) ----
+    rr(d, 480, 200, 1700, 350, "#0c1a12", outline="#2c5", wd=4, r=14)
+    d.line([(1330, 200), (1330, 550)], fill="#2c5", width=3)
+    ctext(d, 905,  300, ["LEFT DISPLAY"],  font(38, True), "#7fe3a8")
+    ctext(d, 1755, 300, ["RIGHT DISPLAY"], font(38, True), "#7fe3a8")
+    ctext(d, 1330, 400, ["boots to  'Stems Full Mix'"], font(28, True), "#7fe3a8")
+    ctext(d, 1330, 460, ["screen layout follows the Group button — see screen maps"],
+          font(22), "#5fb98a")
+    ctext(d, 1330, 505, ["volume / mute / filter / fine / FX 1+2 / 3+4 / all"],
+          font(20), "#4f9a73")
 
-    ctext(d,520,272,"DISPLAY SECTION  (b1-b8 buttons / k1-k8 knobs — change with the Group)",font(13,True),SUB)
-    for i in range(8): key(d,215+i*125,290,110,40,f"b{i+1}",fill="#2a2d36",tcol=TXT)
-    for i in range(8): key(d,215+i*125,338,110,46,f"k{i+1}",fill="#2a2d36",tcol=TXT)
+    # ---- top-right column: VOL / SWING / TEMPO + DIAL + ENTER ----
+    # VOL master (above)
+    key(d, 2270, 200, 220, 80, "VOL", "master volume",
+        fill="#2a2d36", tcol=ACC, r=12)
+    # SWING — A/B target (v0.6 swing-skip)
+    key(d, 2500, 200, 220, 80, "SWING",
+        "swing-skip A/B target\nLED on = Deck A  (NEW v0.6)",
+        fill="#2a2d36", tcol=ACC, r=12)
+    # TEMPO — Load Deck A
+    key(d, 2270, 290, 450, 70, "TEMPO",  "Load focused track → Deck A",
+        fill="#2a2d36", tcol=ACC, r=12)
+    # ENTER — Load Deck B
+    key(d, 2270, 370, 450, 70, "ENTER",  "Load focused track → Deck B",
+        fill="#2a2d36", tcol=ACC, r=12)
 
-    ctext(d,300,420,"GROUP BUTTONS  (pad page + screen)",font(14,True),ACC)
-    glabels=[("A","Stems Pads"),("B","Loops"),("C","Beatjump"),("D","Remix C"),
-             ("E","Pitch/Key"),("F","Loop Station"),("G","FX1 Select"),("H","Transport")]
-    gx=[60,210,360,510]
-    for i,(L,fn) in enumerate(glabels):
-        col=i%4; row=i//4
-        key(d,gx[col],445+row*70,140,58,L,fn,fill="#2a2d36",tcol=ACC)
+    # DIAL (big circle, multi-mode)
+    cx, cy, cr = 2940, 320, 170
+    d.ellipse([cx-cr, cy-cr, cx+cr, cy+cr], fill="#2a2d36", outline=ACC, width=6)
+    d.ellipse([cx-30, cy-30, cx+30, cy+30], fill=ACC, outline="#fff", width=2)
+    ctext(d, cx, cy-100, ["DIAL  (jog)"], font(36, True), ACC)
+    ctext(d, cx, cy+95,
+          ["turn:  browse  /  volume  /  SKIP",
+           "press+hold:  SWING-SKIP engage  (v0.6)",
+           "see Browse Knob section"],
+          font(20, True), "#fff", lh=24)
 
-    # layer buttons
-    ctext(d,250,600,"LAYER + UTILITY BUTTONS",font(14,True),ACC)
-    util=[("SCENE","layer 2 (hold)"),("PATTERN","layer 3 (hold)"),("SOLO","FX1 engage"),
-          ("MUTE","mute all stems"),("VOLUME","Dial = deck vol"),("NOTE REPEAT","Cruise/Auto-DJ")]
-    for i,(L,fn) in enumerate(util):
-        col=i%3; row=i//3
-        key(d,60+col*200,625+row*64,185,54,L,fn,fill="#222630",tcol=TXT)
+    # ---- display row: b1-b8 buttons + k1-k8 knobs ----
+    bx_start = 480; bw = 200; bg = 12
+    ctext(d, bx_start + 8*bw/2 + 3.5*bg, 600,
+          "DISPLAY SECTION  —  b1-b8 buttons and k1-k8 knobs (change with the Group, see screen maps)",
+          font(26, True), SUB)
+    for i in range(8):
+        x = bx_start + i*(bw+bg)
+        key(d, x, 630, bw, 80, f"b{i+1}", fill="#2a2d36", tcol=TXT, r=10)
+    for i in range(8):
+        x = bx_start + i*(bw+bg)
+        # render as knob (circle)
+        nx = x + bw/2
+        d.ellipse([nx-50, 740, nx+50, 840], fill="#2a2d36", outline="#fff5", width=3)
+        d.ellipse([nx-8, 770, nx+8, 786], fill="#fff8")
+        ctext(d, nx, 870, f"k{i+1}", font(22, True), TXT)
 
-    ctext(d,250,775,"TRANSPORT",font(14,True),ACC)
-    trans=[("RESTART","jump start A+B"),("STEP <","beatjump -4"),("STEP >","beatjump +4"),
-           ("GRID","focus A<->B"),("PLAY","play focus"),("REC","recorder"),
-           ("ERASE","Sync ALL (toggle)"),("TAP","-"),("NAV","-")]
-    for i,(L,fn) in enumerate(trans):
-        col=i%3; row=i//3
-        key(d,60+col*200,800+row*64,185,54,L,fn,fill="#222630",tcol=TXT)
+    # ---- GROUP BUTTONS (A-H, hardware: 2 columns of 4) ----
+    ctext(d, 380, 1010, "GROUP BUTTONS  —  pad page + screen", font(30, True), ACC)
+    glabels = [
+        ("A", "Stems Pads",   "per-stem mute + filter"),
+        ("E", "Pitch / Key",  "semitone shift + RESET"),
+        ("B", "Loops",        "8 fixed sizes 1/8..16 beats"),
+        ("F", "Loop Station", "Capture A-D · recall to C"),
+        ("C", "Beatjump",     "+/- 4..32 beats"),
+        ("G", "FX1 Select",   "load FX1 + wet (page-press arms)"),
+        ("D", "Remix C",      "4×4 cell trigger grid"),
+        ("H", "Transport",    "Play / Cue / Sync / Flux"),
+    ]
+    # render in two columns (A,E top), (B,F), (C,G), (D,H)
+    gcols_x = [50, 380]
+    for i, (L, fn, hint) in enumerate(glabels):
+        col = i % 2
+        row = i // 2
+        x = gcols_x[col]
+        y = 1060 + row * 130
+        rr(d, x, y, 320, 110, "#2a2d36", r=14)
+        ctext(d, x+44, y+40, L, font(40, True), ACC)
+        ctext(d, x+200, y+34, fn.split("\n"), font(22, True), TXT, lh=24)
+        ctext(d, x+200, y+76, hint.split("\n"), font(18), SUB, lh=20)
 
-    px,py,ps,pg=840,440,112,12
-    rr(d,px-14,py-40,4*ps+3*pg+28,4*ps+3*pg+56,"#1b1e25",outline=EDGE,r=14)
-    ctext(d,px+(4*ps+3*pg)/2,py-22,"16 PADS  (4x4)",font(15,True),ACC)
-    order=[[13,14,15,16],[9,10,11,12],[5,6,7,8],[1,2,3,4]]
-    for r,rowp in enumerate(order):
-        deck=DA if r<2 else DB
-        for c,p in enumerate(rowp):
-            x=px+c*(ps+pg); y=py+r*(ps+pg)
-            rr(d,x,y,ps,ps,deck,outline="#0008",wd=2,r=12)
-            ctext(d,x+ps/2,y+ps/2,str(p),font(20,True),"#fff")
-    ctext(d,px+(4*ps+3*pg)/2,py+4*ps+3*pg+22,"top rows = DECK A  ·  bottom rows = DECK B",font(12),SUB)
+    # ---- LAYER + UTILITY BUTTONS ----
+    ctext(d, 1100, 1010, "LAYER + UTILITY", font(30, True), ACC)
+    util = [
+        ("SCENE",       "Scene layer (A2-H2)"),
+        ("PATTERN",     "Pattern layer (A3-H3)\n(auto-arms FX3/FX4)"),
+        ("SOLO",        "FX1 engage (route+on)"),
+        ("MUTE",        "Mute ALL stems (toggle)"),
+        ("VOLUME",      "Dial = focused deck vol"),
+        ("NOTE REPEAT", "Cruise / Auto-DJ"),
+    ]
+    for i, (L, fn) in enumerate(util):
+        col = i % 2
+        row = i // 2
+        x = 760 + col * 360
+        y = 1060 + row * 130
+        rr(d, x, y, 340, 110, "#222630", r=14)
+        ctext(d, x+170, y+38, L, font(28, True), TXT)
+        ctext(d, x+170, y+82, fn.split("\n"), font(18), SUB, lh=20)
+
+    # ---- TRANSPORT (sits below the GROUP + LAYER+UTILITY blocks; full-width row) ----
+    ctext(d, 700, 1610, "TRANSPORT", font(30, True), ACC)
+    trans = [
+        ("RESTART", "jump-to-start A+B"),
+        ("STEP <",  "beatjump -4 focused"),
+        ("STEP >",  "beatjump +4 focused"),
+        ("GRID",    "focus A ↔ B"),
+        ("PLAY",    "play focused deck"),
+        ("REC",     "audio recorder toggle"),
+        ("ERASE",   "SYNC ALL  (latched)\n1st: master+sync 4   2nd: off"),
+        ("TAP",     "(unused)"),
+        ("NAV",     "(unused)"),
+    ]
+    for i, (L, fn) in enumerate(trans):
+        col = i % 5     # 5 across, 2 rows — keeps it shorter and clear of the pad block
+        row = i // 5
+        x = 50 + col * 360
+        y = 1660 + row * 130
+        # Highlight ERASE (new SYNC ALL) with accent border so the new feature pops
+        outline = ACC if L == "ERASE" else EDGE
+        wd = 4 if L == "ERASE" else 2
+        rr(d, x, y, 340, 110, "#222630", r=14, outline=outline, wd=wd)
+        ctext(d, x+170, y+34, L, font(26, True), TXT)
+        ctext(d, x+170, y+76, fn.split("\n"), font(17), SUB, lh=20)
+
+    # ---- PADS (16, big, on the right) ----
+    px = 1900; py = 1060; ps = 230; pg = 22
+    pad_total_w = 4*ps + 3*pg
+    pad_total_h = pad_total_w
+    rr(d, px-30, py-66, pad_total_w+60, pad_total_h+110, "#1b1e25", outline=EDGE, r=20, wd=3)
+    ctext(d, px + pad_total_w/2, py - 36, "16 PADS  (4×4)  —  page contents change with Group + Layer",
+          font(28, True), ACC)
+    order = [[13,14,15,16],[9,10,11,12],[5,6,7,8],[1,2,3,4]]
+    for r, rowp in enumerate(order):
+        for c, p in enumerate(rowp):
+            x = px + c*(ps+pg); y = py + r*(ps+pg)
+            deck_color = DA if r < 2 else DB
+            rr(d, x, y, ps, ps, deck_color, outline="#0008", wd=3, r=18)
+            ctext(d, x+ps/2, y+ps/2, str(p), font(56, True), "#fff")
+    ctext(d, px + pad_total_w/2, py + pad_total_h + 30,
+          "top rows (9-16) = DECK A    ·    bottom rows (1-8) = DECK B",
+          font(22, True), SUB)
+
+    # ---- legend strip at the bottom ----
+    ctext(d, W/2, H-90,
+          "v0.6-alpha — SWING-SKIP (hold Dial, turn to seek Swing-selected deck via TID 103, replaces Beatjump-on-encoder)",
+          font(22, True), ACC)
+    ctext(d, W/2, H-55,
+          "v0.5-alpha — Group G page-press arms FX1 (route A+B + unit on);  F2 Loop Recorder fully wired;  H3 + Solo = one-hit pattern fire;  Erase = Sync ALL",
+          font(20), SUB)
+
     im.save(f"{OUT}/control_map.png"); return im
 
 # ---------------- COMPOSITES ----------------
@@ -385,19 +494,14 @@ def build_pdf(name, items):
 # (Removed the old 33-page-per-pad printable: dropped per Garry's feedback "not an image
 # for every section". The 5-page logical version is built further down using the cheatsheets.)
 
-# ---------------- DECK OVERVIEW (use Garry's labeled MK2 template — REAL hardware positions) -
-# The auto-generated control_map.png puts buttons in arbitrary boxed positions; Garry's
-# template_labeled.png is the true MK2 with buttons in their actual hardware locations,
-# so that's the canonical "first thing you see" overview.
+# ---------------- DECK OVERVIEW = the (now-high-res, fully-labeled) control map ------------
+# Earlier this used template_labeled.png, but at 1460×1222 it was fuzzy when djtt scaled the
+# hero image, and it was missing labels for the v0.5/v0.6 features. The control_map() above
+# is now 3200×2200, hardware-positioned, and labels every functional button — so use that.
 import shutil
-TEMPLATE_LABELED = "template_labeled.png"
-if os.path.exists(TEMPLATE_LABELED):
-    shutil.copy(TEMPLATE_LABELED, f"{OUT}/deck_overview.png")
-    overview_img = Image.open(f"{OUT}/deck_overview.png")
-    print(f"  + deck_overview.png (copied from {TEMPLATE_LABELED}, {overview_img.size[0]}x{overview_img.size[1]})")
-else:
-    overview_img = cm
-    print(f"  WARNING: {TEMPLATE_LABELED} not found, falling back to auto-generated control_map")
+shutil.copy(f"{OUT}/control_map.png", f"{OUT}/deck_overview.png")
+overview_img = Image.open(f"{OUT}/deck_overview.png")
+print(f"  + deck_overview.png (= high-res control_map, {overview_img.size[0]}x{overview_img.size[1]})")
 
 # Rebuild printable PDFs: 5 logical pages = overview + 3 layer cheatsheets + 1 screens cheat.
 # Each cheatsheet ALREADY packs 8 pad pages in a 4x2 grid (set above via grid_sheet).
