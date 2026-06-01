@@ -382,48 +382,44 @@ def build_pdf(name, items):
                   resolution=200.0)
     return pages
 
-# Master printable: control map + every pad page + every screen page in print order
-items_full = [(cm, "MK2 Control Map", "1 / 33")]
-items_full += [(base_imgs[i],   f"BASE  —  Group {g}",   f"{i+2} / 33") for i, g in enumerate("ABCDEFGH")]
-items_full += [(scene_imgs[i],  f"SCENE  —  Group {g}2", f"{i+10} / 33") for i, g in enumerate("ABCDEFGH")]
-items_full += [(pattern_imgs[i],f"PATTERN  —  Group {g}3", f"{i+18} / 33") for i, g in enumerate("ABCDEFGH")]
-items_full += [(screen_imgs[i], f"SCREEN  —  Group {g}",   f"{i+26} / 33") for i, g in enumerate("ABCDEFGH")]
-build_pdf("printable_full_set", items_full)
+# (Removed the old 33-page-per-pad printable: dropped per Garry's feedback "not an image
+# for every section". The 5-page logical version is built further down using the cheatsheets.)
 
-# Smaller per-layer PDFs (handy for a single laminated card per layer)
-build_pdf("printable_base",    [(cm, "MK2 Control Map", "1 / 9")] +
-                               [(base_imgs[i],    f"BASE  —  Group {g}",    f"{i+2} / 9") for i, g in enumerate("ABCDEFGH")])
-build_pdf("printable_scene",   [(scene_imgs[i],   f"SCENE  —  Group {g}2",  f"{i+1} / 8") for i, g in enumerate("ABCDEFGH")])
-build_pdf("printable_pattern", [(pattern_imgs[i], f"PATTERN  —  Group {g}3",f"{i+1} / 8") for i, g in enumerate("ABCDEFGH")])
-build_pdf("printable_screens", [(screen_imgs[i],  f"SCREEN  —  Group {g}",  f"{i+1} / 8") for i, g in enumerate("ABCDEFGH")])
+# ---------------- DECK OVERVIEW (use Garry's labeled MK2 template — REAL hardware positions) -
+# The auto-generated control_map.png puts buttons in arbitrary boxed positions; Garry's
+# template_labeled.png is the true MK2 with buttons in their actual hardware locations,
+# so that's the canonical "first thing you see" overview.
+import shutil
+TEMPLATE_LABELED = "template_labeled.png"
+if os.path.exists(TEMPLATE_LABELED):
+    shutil.copy(TEMPLATE_LABELED, f"{OUT}/deck_overview.png")
+    overview_img = Image.open(f"{OUT}/deck_overview.png")
+    print(f"  + deck_overview.png (copied from {TEMPLATE_LABELED}, {overview_img.size[0]}x{overview_img.size[1]})")
+else:
+    overview_img = cm
+    print(f"  WARNING: {TEMPLATE_LABELED} not found, falling back to auto-generated control_map")
 
-# ---------------- DJTT LISTING-IMAGE CHUNKS (tall layout split into page-sized portions) ----
-# Each chunk has the aspect of a US-letter portrait page (8.5:11 = 1700:2200). The full
-# layout_guide.png is one tall image; chunking it lets djtt show it as a sequence of
-# screen-sized blocks instead of one endless scroll.
-def chunk_listing_image(full_img, out_prefix="listing_chunk", letter_aspect=(1700, 2200)):
-    fw, fh = full_img.size
-    target_w = fw
-    target_h = int(round(fw * letter_aspect[1] / letter_aspect[0]))  # height matching letter aspect
-    n_chunks = max(1, (fh + target_h - 1) // target_h)
-    chunks = []
-    for i in range(n_chunks):
-        y0 = i * target_h
-        y1 = min(y0 + target_h, fh)
-        # If the last chunk is short, pad with BG so all chunks share the same aspect
-        chunk = Image.new("RGB", (target_w, target_h), BG)
-        crop = full_img.crop((0, y0, target_w, y1))
-        chunk.paste(crop, (0, 0))
-        path = f"{OUT}/{out_prefix}_{i+1}_of_{n_chunks}.png"
-        chunk.save(path)
-        chunks.append(chunk)
-    return chunks
-
-layout_guide_img = Image.open(f"{OUT}/layout_guide.png")
-chunks = chunk_listing_image(layout_guide_img)
-print(f"  + {len(chunks)} listing-image chunks (letter-aspect each, for djtt body embeds)")
+# Rebuild printable PDFs: 5 logical pages = overview + 3 layer cheatsheets + 1 screens cheat.
+# Each cheatsheet ALREADY packs 8 pad pages in a 4x2 grid (set above via grid_sheet).
+print()
+print("=== Printable set (5 logical pages, letter LANDSCAPE) ===")
+items_logical = [
+    (overview_img, "MK2 Deck Overview  (hardware-positioned)", "1 / 5"),
+    (cs_base,      "BASE layer  —  Group A-H pads",            "2 / 5"),
+    (cs_scene,     "SCENE layer  —  Group A2-H2",              "3 / 5"),
+    (cs_pattern,   "PATTERN layer  —  Group A3-H3  (drum Pattern Player)", "4 / 5"),
+    (cs_screen,    "SCREEN pages  —  display knobs / buttons", "5 / 5"),
+]
+build_pdf("printable_full_set", items_logical)
+# Also produce per-layer single-page PDFs for someone who only wants one layer's cheat
+build_pdf("printable_overview", [(overview_img, "MK2 Deck Overview", "1 / 1")])
+build_pdf("printable_base",     [(cs_base,      "BASE layer cheatsheet",    "1 / 1")])
+build_pdf("printable_scene",    [(cs_scene,     "SCENE layer cheatsheet",   "1 / 1")])
+build_pdf("printable_pattern",  [(cs_pattern,   "PATTERN layer cheatsheet", "1 / 1")])
+build_pdf("printable_screens",  [(cs_screen,    "SCREEN pages cheatsheet",  "1 / 1")])
 
 n=len(PAD)+len(SCREENS)+1
-print(f"WROTE {OUT}/: control_map + {len(PAD)} pad pages + {len(SCREENS)} screens + 4 cheatsheets + layout_guide")
-print(f"  + 5 printable PDFs (full set + per-layer, letter LANDSCAPE — diagram fills the page)")
+print(f"WROTE {OUT}/: deck_overview + {len(PAD)} pad pages + {len(SCREENS)} screens + 4 cheatsheets + layout_guide")
+print(f"  + printable_full_set.pdf (5 letter-landscape pages, logically laid out)")
+print(f"  + 5 single-page PDFs (overview / base / scene / pattern / screens)")
 print(f"  = {n} core panels documenting 24 pad-pages and 8 screen-pages across 3 layers.")
