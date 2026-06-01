@@ -28,9 +28,10 @@ F = "C:/Windows/Fonts/arial.ttf"; FB = "C:/Windows/Fonts/arialbd.ttf"
 def font(sz, bold=False): return ImageFont.truetype(FB if bold else F, sz)
 
 BG="#16181d"; PANEL="#23262e"; EDGE="#3a3f4b"; TXT="#e8e8ea"; SUB="#9aa0ac"; ACC="#ffb000"
-# role colors
-DA="#2e6fb0"; DB="#1f8a5b"; DC="#8a4fc0"; DD="#c87a2e"
-FX3="#1f9aa0"; FX4="#b0498f"; FXSEL="#c8902e"; NEU="#454c5b"; MAC="#a06a20"
+# role colors — brighter "LED" palette so the printed/screen diagrams read at a glance
+DA="#3a8be0"; DB="#2dba78"; DC="#a865d8"; DD="#e8973a"
+FX3="#2bc5ce"; FX4="#d967b3"; FXSEL="#e8b13c"; NEU="#5a6175"; MAC="#c78531"
+LR="#7fbf6a"   # Loop Recorder pad tint (greenish — drives global recorder)
 
 def rr(d,x,y,w,h,fill,outline=EDGE,wd=2,r=10):
     d.rounded_rectangle([x,y,x+w,y+h],radius=r,fill=fill,outline=outline,width=wd)
@@ -85,7 +86,7 @@ page("F","F","base","LOOP STATION","capture (silent) + recall to Deck C",
     ["Capture\nA","Capture\nB","Capture\nC","Capture\nD"]+
     [f"Recall\nS1 C{c}" for c in (1,2,3,4)][0:4]+
     [f"Recall\nS2 C{c}" for c in (1,2,3,4)]+[f"Recall\nS3 C{c}" for c in (1,2,3,4)], "single")
-page("G","G","base","FX1 SELECT","load FX1 effect + wet while held",
+page("G","G","base","FX1 SELECT","load FX1 + wet while held  (Group G page-press arms FX1 route+on)",
     ["Beat-\nmasher","Gater","Delay","Tape\nDelay","Iceverb","Phaser","Phaser\nFlux","Bouncer",
      "Oscill-\nator","Zzzurp","Strr-\netch","Filter\nLFO","Bass-o-\nMatic","Delay\nT3","Phaser\nPulse","Delay\ndub"],"fxsel")
 page("H","H","base","TRANSPORT","play / cue / sync / flux",
@@ -108,8 +109,13 @@ page("D2","D","scene","REMIX DECK C 5-8","4x4 cells 5-8 (Deck C)",
 page("E2","E","scene","TONE PLAY","play one stem chromatically",
     [f"B +{s}" for s in (1,2,3,4)]+["B 0\nRESET"]+[f"B +{s}" for s in (5,6,7)]+
     [f"A +{s}" for s in (1,2,3,4)]+["A 0\nRESET"]+[f"A +{s}" for s in (5,6,7)], lr(DB,DA))
-page("F2","F","scene","LOOP RECORDER","global; 4 controls x4 rows  (experimental)",
-    (["Rec /\nPlay","Size -","Size +","Undo"])*4, "single")
+page("F2","F","scene","LOOP RECORDER","global; Size + Dry/Wet + transport (mirrored)",
+    # bottom rows 1-4 + 5-8: Rec / Play / Undo / Delete (transport mirrored for two-hand reach)
+    # row 9-12: Dry/Wet 0 / 33 / 66 / 100 %
+    # row 13-16 (top): Size 4 / 8 / 16 / 32 beats
+    ["Rec","Play","Undo","Delete","Rec","Play","Undo","Delete",
+     "D/W\n0%","D/W\n33%","D/W\n66%","D/W\n100%",
+     "Size\n4","Size\n8","Size\n16","Size\n32"], [LR]*16)
 page("G2","G","scene","FX1 SELECT (hard)","same effects, harder/wetter bank",
     ["Beat-\nmasher","Gater","Delay","Tape\nDelay","Iceverb","Phaser","Phaser\nFlux","Bouncer",
      "Oscill-\nator","Zzzurp","Strr-\netch","Filter\nLFO","Bass-o-\nMatic","Delay\nT3","Phaser\nPulse","Delay\nmax"],"fxsel")
@@ -140,7 +146,7 @@ page("G3","G","pattern","MACROS","one-tap combos across both voices",
     ["DROP","BUILD","FILL","CLEAR","FX3\nPat 1","FX3\nPat 3","FX3\nPat 5","FX3\nPat 7",
      "FX4\nPat 1","FX4\nPat 3","FX4\nPat 5","FX4\nPat 7","FX3\nPlay","FX4\nPlay","FX3\nVol+","FX4\nVol+"],
     [MAC,MAC,MAC,MAC,FX3,FX3,FX3,FX3,FX4,FX4,FX4,FX4,FX3,FX4,FX3,FX4])
-page("H3","H","pattern","PATTERN PICKER","pick groove (sparse->busy)",
+page("H3","H","pattern","PATTERN PICKER","sparse->busy  +  Solo engaged: pad press = play-from-step-1",
     [f"FX3\nPat {i}" for i in range(1,9)]+[f"FX4\nPat {i}" for i in range(1,9)], lr(FX3,FX4))
 
 LAYER_NAME={"base":"BASE  (Scene off)","scene":"SCENE  (Scene light on)","pattern":"PATTERN  (Pattern light on)"}
@@ -228,7 +234,7 @@ def screenpage(group):
 def control_map():
     W,H=1340,1020
     im=Image.new("RGB",(W,H),BG); d=ImageDraw.Draw(im)
-    ctext(d,W/2,30,"GideonSTEM-Maschine — Maschine MK2 control map (ALPHA v0.4)",font(26,True),ACC)
+    ctext(d,W/2,30,"GideonSTEM-Maschine — Maschine MK2 control map (ALPHA v0.5)",font(26,True),ACC)
     ctext(d,W/2,60,"Group A-H = pick the page  ·  Scene / Pattern = pick the layer  ·  top pads 9-16 = Deck A · bottom 1-8 = Deck B",font(14),SUB)
 
     key(d,40,95,150,46,"BROWSE","toggle browser",fill="#2a2d36",tcol=ACC)
@@ -329,6 +335,64 @@ def stack(images, name):
 
 stack([cm,cs_base,cs_scene,cs_pattern,cs_screen],"layout_guide")
 
+# ---------------- PRINTABLE PDF (one diagram per letter page) ----------------
+# Letter portrait at 200 DPI = 1700 x 2200 px. Each page: header strip + diagram
+# centered + scaled to fit with whitespace margin. Multi-page PDF combines all.
+PAGE_W, PAGE_H = 1700, 2200
+MARGIN = 80
+HEADER_H = 100
+
+def page_for_print(diagram_img, title, page_label=""):
+    p = Image.new("RGB", (PAGE_W, PAGE_H), "#ffffff")
+    d = ImageDraw.Draw(p)
+    # header strip
+    d.rectangle([0, 0, PAGE_W, HEADER_H], fill="#16181d")
+    d.text((MARGIN, 28), "GideonSTEM-Maschine  v0.5-alpha", font=font(22, True), fill=ACC)
+    if page_label:
+        tw = d.textlength(page_label, font=font(20, True))
+        d.text((PAGE_W - MARGIN - tw, 28), page_label, font=font(20, True), fill=SUB)
+    # title under header
+    d.text((MARGIN, HEADER_H + 24), title, font=font(28, True), fill="#16181d")
+    # fit diagram into the remaining area (below title) preserving aspect
+    body_top = HEADER_H + 90
+    body_bottom = PAGE_H - 60
+    body_w = PAGE_W - 2 * MARGIN
+    body_h = body_bottom - body_top
+    iw, ih = diagram_img.size
+    scale = min(body_w / iw, body_h / ih)
+    nw, nh = int(iw * scale), int(ih * scale)
+    resized = diagram_img.resize((nw, nh), Image.LANCZOS)
+    x = (PAGE_W - nw) // 2
+    y = body_top + (body_h - nh) // 2
+    p.paste(resized, (x, y))
+    # footer
+    d.text((MARGIN, PAGE_H - 40), "github.com/gbroeckling/GideonSTEM-Maschine",
+           font=font(14), fill="#666")
+    return p
+
+def build_pdf(name, items):
+    """items: list of (PIL image, title, label). Saves as PDF."""
+    pages = [page_for_print(img, title, lbl) for img, title, lbl in items]
+    pages[0].save(f"{OUT}/{name}.pdf", save_all=True, append_images=pages[1:],
+                  resolution=200.0)
+    return pages
+
+# Master printable: control map + every pad page + every screen page in print order
+items_full = [(cm, "MK2 Control Map", "1 / 33")]
+items_full += [(base_imgs[i],   f"BASE  —  Group {g}",   f"{i+2} / 33") for i, g in enumerate("ABCDEFGH")]
+items_full += [(scene_imgs[i],  f"SCENE  —  Group {g}2", f"{i+10} / 33") for i, g in enumerate("ABCDEFGH")]
+items_full += [(pattern_imgs[i],f"PATTERN  —  Group {g}3", f"{i+18} / 33") for i, g in enumerate("ABCDEFGH")]
+items_full += [(screen_imgs[i], f"SCREEN  —  Group {g}",   f"{i+26} / 33") for i, g in enumerate("ABCDEFGH")]
+build_pdf("printable_full_set", items_full)
+
+# Smaller per-layer PDFs (handy for a single laminated card per layer)
+build_pdf("printable_base",    [(cm, "MK2 Control Map", "1 / 9")] +
+                               [(base_imgs[i],    f"BASE  —  Group {g}",    f"{i+2} / 9") for i, g in enumerate("ABCDEFGH")])
+build_pdf("printable_scene",   [(scene_imgs[i],   f"SCENE  —  Group {g}2",  f"{i+1} / 8") for i, g in enumerate("ABCDEFGH")])
+build_pdf("printable_pattern", [(pattern_imgs[i], f"PATTERN  —  Group {g}3",f"{i+1} / 8") for i, g in enumerate("ABCDEFGH")])
+build_pdf("printable_screens", [(screen_imgs[i],  f"SCREEN  —  Group {g}",  f"{i+1} / 8") for i, g in enumerate("ABCDEFGH")])
+
 n=len(PAD)+len(SCREENS)+1
 print(f"WROTE {OUT}/: control_map + {len(PAD)} pad pages + {len(SCREENS)} screens + 4 cheatsheets + layout_guide")
+print(f"  + 5 printable PDFs (full set + per-layer)")
 print(f"  = {n} core panels documenting 24 pad-pages and 8 screen-pages across 3 layers.")

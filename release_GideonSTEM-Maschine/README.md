@@ -197,7 +197,7 @@ Reached with the **Scene** light on. Same Group buttons, different jobs.
 | **C2** | **Phrase Jump** | Per deck: big jumps — ±16, ±32, ±64, ±128 beats. |
 | **D2** | **Remix grid 5–8** | Deck C remix cells **5–8** per slot — extends the page-D grid. |
 | **E2** | **Tone Play** | Per deck: play one stem chromatically — RESET (0) + 1 … +7 semitones. (Mute the other stems on page A to play one melodically.) |
-| **F2** | **Loop Recorder** | Traktor's global Loop Recorder — **Rec/Play, Size −, Size +, Undo**, repeated on all four rows for two-hand reach. *(Experimental.)* |
+| **F2** | **Loop Recorder** | Traktor's global Loop Recorder, fully wired in v0.5. **Top row** = Size **4 / 8 / 16 / 32** beats (Direct enum). **Row 2** = Dry/Wet **0 / 33 / 66 / 100 %**. **Rows 3 + 1 (mirrored)** = **Rec / Play / Undo / Delete** for two-hand reach. |
 | **G2** | **FX1 Select (hard)** | Same 16 effects as Group G, with harder/wetter parameter settings. *(Alpha: see Known Issues.)* |
 | **H2** | **Transport C/D** | Play/Cue/Sync/Flux for **Deck C** (top) and **Deck D** (bottom). |
 
@@ -217,7 +217,7 @@ auto-routes Deck D into FX3/FX4 and turns both on.
 | **E3** | **Sound Design** | Per voice: Next/Prev sample, reset pitch, Play/Mute, and a 4-step **Decay** sweep (min → max). |
 | **F3** | **Gate & Volume** | Per voice: two momentary **mute-gate** pads (stutter the drums), Play, reset pitch, and a 4-step **volume** ramp (duck → full). |
 | **G3** | **Macros** | One-tap combos across both voices: **DROP** (mute both), **BUILD** (busy pattern), **FILL** (max pattern), **CLEAR** (pattern 1 + reset pitch); FX3/FX4 quick patterns; FX3/FX4 play + volume-full. |
-| **H3** | **Pattern Picker** | FX3 patterns 1–8 (bottom), FX4 patterns 1–8 (top). Patterns run **sparse → busy**, so stepping up the pads intensifies the groove. |
+| **H3** | **Pattern Picker** | FX3 patterns 1–8 (bottom), FX4 patterns 1–8 (top). Patterns run **sparse → busy**, so stepping up the pads intensifies the groove. **Solo overlay (v0.5):** while Solo is engaged on the Pattern layer, each pad ALSO fires Play with Hold — press = play-from-step-1 (re-fires the pattern), release = mute, so patterns can be one-shot triggered. |
 
 ---
 
@@ -254,7 +254,8 @@ layers — only the pads change when you switch Scene/Pattern.
 | **Step ◄ / Step ►** | Beatjump −4 / +4 beats on the focused deck. |
 | **Scene** | Engage the **Scene layer** (pages A2–H2). Press again to return to Base. |
 | **Pattern** | Engage the **Pattern layer** (pages A3–H3) and auto-arm the FX3/FX4 drum bus. |
-| **Solo** | **FX1 engage** — routes Deck A + B into FX1 and switches FX1 on (the arm for the Group G FX-select pads). |
+| **Solo** | **FX1 engage** — routes Deck A + B into FX1 and switches FX1 on. In v0.5 the **Group G page-press** also arms FX1 (same route + on), so the G pads keep only the effect-select and the page-button drives the arm. |
+| **Erase** | **Sync All** (latched toggle). 1st tap = set focused deck as Tempo Master + Sync ON on all 4 decks. 2nd tap = Sync OFF on all 4. LED tracks Deck A sync state. |
 | **Mute** | Toggle-mute **all stem slots** of decks A–D at once (level-preserving). LED follows mute state. |
 | **Volume** | **Volume mode** — while latched, the **Dial** drives the focused deck's channel volume. |
 | **Note Repeat** | Toggle **Cruise / Auto-DJ**. |
@@ -296,15 +297,18 @@ browser scroll (Dial + arrows), restart, mute-all, and record-off-at-startup.
 
 **Not working yet / still being validated:**
 
-- **FX-select pads (Group G / G2) — NOT working yet.** Pressing a Group G pad is meant to
-  load the effect into FX Unit 1, switch it on, route it to the decks, and swell the wet.
-  In the current build the effect-select and on/route do not fire reliably together — this
-  is the top item being fixed. The **Solo** button (FX1 engage) and the **FX screen pages**
-  (Group F/G/H, §10) are the working way to drive FX for now. *(Fix in progress.)*
+- **FX-select pads (Group G / G2) — v0.5 ships the fix, pending hardware test.** The race
+  that made G unreliable in v0.4 has been moved off the pad: pressing the **Group G page
+  button** now LATCHES the FX1 arm (route Deck A+B → FX1 + FX1 unit on), so the pad keeps
+  only the effect-select and wet swell. Tap G again to disarm. The **Solo** button still
+  arms FX1 the same way, so either path works. Test on next hardware session.
 - **Drum Pattern Player (A3–H3)** — routing is in place and the drums should be audible once
   a Pattern Player is loaded into FX3/FX4; the per-pad pattern/volume/pitch values are built
-  from the verified FX-unit controls but want a full hardware pass.
-- **Loop Recorder (F2)** — experimental; the transport TIDs are sparsely documented.
+  from the verified FX-unit controls but want a full hardware pass. v0.5 adds a **Solo
+  overlay** on H3 (Pattern Picker): with Solo engaged, each pad press also fires Play (Hold)
+  so the pattern re-fires from step 1, release mutes — pending hardware test.
+- **Loop Recorder (F2)** — v0.5 rebuilds this page with the proper Size enum, Float
+  Dry/Wet, and mirrored transport (see §8). Pending hardware test.
 - **Group A–H button colors** — the buttons render the Maschine's **native** group colors.
   Custom per-group colors require a different architecture that trades away native page
   switching; not enabled in this build.
@@ -383,3 +387,21 @@ please get in touch and it will be corrected.)*
   - Rebuilt, layer-aware **diagrams** (control map, 24 pad maps, 8 screen maps, per-layer
     cheatsheets) and a sanitized **TID reference** spreadsheet.
   - **Known alpha gap:** the Group G FX-select pads are not firing reliably yet (fix in progress).
+- **v0.5-alpha** — the FX-pad fix + Loop Recorder + a Pattern one-hit overlay (pending
+  hardware test):
+  - **Group G FX1 arm moved to the page button.** Pressing the Group G button now latches
+    the FX1 arm (route Deck A+B → FX1 + FX1 unit on); the pad keeps only effect-select and
+    wet swell. Ends the v0.4 race condition. Solo still arms the same way as a parallel path.
+  - **Loop Recorder (F2)** fully wired with the correct TID encodings — Size 4/8/16/32 beats
+    on the top row (Direct enum), Dry/Wet 0/33/66/100% on row 2 (Float Direct), and
+    Rec/Play/Undo/Delete mirrored on rows 1 + 3 for two-hand reach.
+  - **H3 Solo overlay** — while the Solo button is engaged on the Pattern layer, each H3
+    pad ALSO fires Play (Hold). Press = play-from-step-1 (re-fires the pattern); release =
+    mute. One-shot pattern triggering without leaving the layer.
+  - **Erase = Sync All** (latched toggle). 1st tap sets focused deck as Tempo Master +
+    Sync ON on all 4 decks; 2nd tap disengages.
+  - **Rec LED TID** corrected (2058 → 2056) so the Rec button LED tracks the audio recorder
+    state on both input and output paths.
+  - Diagrams refreshed (brighter LED-style palette, the F2/H3/G subtitles updated) and a
+    new **printable per-page PDF set** added to `diagrams/` (one diagram per US-letter page,
+    plus per-layer printable PDFs).
