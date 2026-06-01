@@ -5,6 +5,8 @@ controller into a 2-deck stems mixer, a 24-page performance pad surface (loops, 
 remix, key, tone-play, loop-roll, drum Pattern Player, FX), a transport + browser
 controller, and a 4-unit FX command surface — all from a single Python build.**
 
+> **Printable one-page deck overview (PDF):** [`Images/GideonSTEM-Maschine — Deck.pdf`](https://github.com/gbroeckling/GideonSTEM-Maschine/blob/main/Images/GideonSTEM-Maschine%20%E2%80%94%20Deck.pdf) — a styled at-a-glance reference (lives in the GitHub repo, not in the .zip bundle).
+
 > ## ⚠️ ALPHA RELEASE — read this first
 > This mapping is **alpha**. It is in active testing on real hardware. The core
 > functions below are confirmed working, but some features (notably the **FX-select
