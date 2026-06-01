@@ -19,6 +19,12 @@ DESC = {
     2350: "Flux mode toggle", 2380: "Beatjump (value = jump-size index, sign = direction)",
     2588: "Toggle deck focus (A / B)", 9: "Deck focus selector",
     102: "Deck channel volume",
+    103: "Seek Position (relative; scrubs the playhead through the track - responsive, no quantize)",
+    120: "Jog Turn (centered float; jog-wheel nudge / pitch-bend)",
+    121: "Scratch (centered float; vinyl-style scratch)",
+    2187: "Jog Touch On (jog capacitive touch)",
+    2288: "Scratch Control On",
+    211: "Seek Position - Preview Player (relative)",
     # loops
     200: "Loop In", 201: "Loop Out", 202: "Loop active on / off", 203: "Reloop",
     2192: "Loop set (auto-loop at current size)",

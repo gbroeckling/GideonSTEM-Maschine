@@ -410,9 +410,10 @@ MOD2 = 2549   # Traktor Modifier #2 (ModId 2547+2)
 # toggled). (An earlier attempt to "fix" it with gate+Toggle broke a working setup — reverted.)
 _SETMOD2_TEMPLATE = bytes.fromhex('0000000400000000000000030000000000000000000000000000000040a00000000000000000000100000001000000000000000000000000000000000000000000000000000000000000000000000001000000000000000100000007000000000000007f0000000000000001000000010000000100000000')
 
-def _cmad_setmod2(value, interaction=2):
+def _cmad_setmod2(value, interaction=2, invert=0):
     b = bytearray(_SETMOD2_TEMPLATE)
     b[8:12]  = struct.pack('>I', interaction)
+    b[20:24] = struct.pack('>I', invert)   # Invert=1: with a gate button, Toggle fires on the 0/release edge, not the press
     b[44:48] = struct.pack('>I', value)
     assert len(b) == 120
     return bytes(b)
@@ -885,6 +886,17 @@ def _cmad_voldial(deck):
     b[12:16] = struct.pack('>i', deck)
     return bytes(b)
 
+def _cmad_seekdial(deck, beats_index=8):
+    """SWING-SKIP relative-encoder CMAD: one Dial detent skips the deck's playhead via Beatjump
+    (TID 2380), direction from the turn. Cloned from the proven Dial scroll encoder (CtrlType=2
+    Encoder, Interaction=4 Relative) with the deck field patched and @44 set to the jump SIZE.
+    beats_index 8 = 8-beat jump (~4-5 s/click at house tempo -> ~50 clicks across a 4 min track);
+    7=4 / 9=16 / 10=32 beats. Size + direction handling are the bits to verify/tune on hardware."""
+    b = bytearray(_BROWSE_SCROLL)
+    b[12:16] = struct.pack('>i', deck)
+    b[44:48] = struct.pack('>i', beats_index)
+    return bytes(b)
+
 def _cmad_fxon(field, interaction=2):
     """FX On/Off-type command set to ON: FX-unit/deck assign (321/322/338/339), Unit-On (369), FX
     buttons (370/371/372). These are OnOffInCommands and REQUIRE HasValueUI=1 + LedMaxRange=int 1 — a
@@ -899,7 +911,13 @@ def _cmad_fxon(field, interaction=2):
     return bytes(b)
 
 MOD3 = 2550   # Traktor Modifier #3 — FX1 "engage" state (0 = off, 1 = engaged)
-MOD4 = 2551   # Traktor Modifier #4 — "volume mode" (Volume button CC7 latched -> Dial = deck volume)
+MOD4 = 2551   # Traktor Modifier #4 — Dial mode: 0 = browse, 1 = volume (Volume CC7), 2 = swing-skip (Swing CC9 held)
+MOD5 = 2552   # Traktor Modifier #5 — swing-skip A/B target (1 = Deck A, 0 = Deck B), flips each Swing press
+# Continuous SEEK command for the responsive Dial-skip (replaces laggy Beatjump 2380, which is a
+# Hold/Enum trigger and accumulates on a relative encoder). TID 103 = "Seek Position (Deck Common)",
+# a FloatInCommand<FloatRangeRelative> — confirmed authoritative via cmdr KnownCommands.cs, and seen
+# in Garry's own VCI-380 mapping. Paired with the proven relative-encoder CMAD = instant per-tick seek.
+SEEK_TID = 103   # Seek Position (Deck Common), relative float
 
 def _gate2(cmad, m1, v1, m2, v2):
     """Gate by TWO modifier conditions, ANDed (slot 1 @52, slot 2 @64). Fires only when
@@ -963,7 +981,7 @@ def _transport_nav_mappings():
         (cc(106), 0, 2380, _cmad_beatjump(-1, 7)),     # Step R  -> Beatjump +4 beats (focused)
         (cc(3),   0, 3076, _cmad_btn(0, 3)),           # Tempo   -> Load selected into Deck A
         (cc(100), 0, 3076, _cmad_btn(1, 3)),           # Enter   -> Load selected into Deck B
-        (cc(102), 0, 3076, _cmad_btn(-1, 3)),          # Push    -> Load (focused)
+        (cc(102), 0, MOD4, _cmad_setmod2(2)),          # Dial PRESS (Push) -> ENGAGE swing-skip (Hold: Mod#4=2 while held; turn Dial to skip the Swing-selected deck). Replaces Load-focused -> use Tempo=Load A / Enter=Load B.
         (cc(98),  0, 3328, _scroll(-1)),               # Master L -> Browser TREE select up (browse folders)
         (cc(99),  0, 3328, _scroll(1)),                # Master R -> Browser TREE select down (browse folders)
         (cc(108), 1, 100,  _cmad_led_out(-1)),         # Play LED  -> lit (green) when focused deck playing
@@ -1475,6 +1493,15 @@ def patch_ncc(path):
             r'\g<1>gate\g<2>', content, flags=re.S)
     print("  [NCC] transport buttons -> gate (single-press)")
 
+    # Swing button: CC9 collides with the FX device (Ch01 CC9 = FX1 Dry/Wet), so pressing Swing
+    # slammed FX1 wet to full. Remap the Swing button to CC124 (unused anywhere in the NCC) so the
+    # swing-skip mappings own it cleanly. The gate + LED-follow patches above key off id="Swing"
+    # so they still apply; only the controller number changes.
+    content, nsw = re.subn(
+        r'(<button version="1" id="Swing">\s*<controller>)9(</controller>)',
+        r'\g<1>124\g<2>', content)
+    print(f"  [NCC] Swing button -> CC124 (was CC9; avoids FX1 Dry/Wet collision) ({nsw} buttons)")
+
     # Rec LED off at startup: the Rec button defaulted to <last>127</last> (lit at boot).
     # Set it to 0 so the red light is off until recording actually starts.
     content, n = re.subn(
@@ -1658,6 +1685,17 @@ perf_map = (
                ("Ch01.CC.101", 0, 3200, _gate2(bytes(_BROWSE_SCROLL), MOD2, 1, MOD4, 0)),
                ("Ch01.CC.101", 0, 102,  _gate2(_cmad_voldial(3), MOD2, 2, MOD4, 0)),
                ("Ch01.CC.101", 0, 102,  _gate(_cmad_voldial(-1), MOD4, 1)),
+               # === SWING-SKIP (TEST v2) — PRESS-AND-HOLD the Dial to engage; turn it to skip the
+               # IDLE deck's playhead (~8 beats/click). SWING button = A/B selector: an NCC TOGGLE
+               # that latches its OWN LED locally (ON = Deck A, OFF = Deck B) and sets Mod#5 — local
+               # LED because Traktor can't drive an LED from a modifier. Swing is remapped CC9->CC124
+               # (Ch01 CC9 = FX1 Dry/Wet, so CC9 slammed FX wet to full; CC124 is unused). Engage =
+               # Dial-mode value 2 (Mod#4), set by the Dial PRESS (CC102, replacing its old Load-
+               # focused; Load A = Tempo, Load B = Enter remain). Existing Dial/browse/volume mappings
+               # are gated Mod#4==0 or ==1, so they don't fire while the Dial is pressed (mode 2).
+               ("Ch01.CC.124", 0, MOD5,  _cmad_setmod2(1)),                                      # Swing toggle -> A/B target (Hold: latch on->Mod#5=1=Deck A, off->0=Deck B). LED latches LOCALLY in the NCC.
+               ("Ch01.CC.101", 0, SEEK_TID, _gate2(_cmad_voldial(0), MOD4, 2, MOD5, 1)),         # Dial turn while PRESSED -> responsive SEEK Deck A (continuous, like browse/vol). Target = A (Swing light on).
+               ("Ch01.CC.101", 0, SEEK_TID, _gate2(_cmad_voldial(1), MOD4, 2, MOD5, 0)),         # Dial turn while PRESSED -> responsive SEEK Deck B. Target = B (Swing light off).
                # Erase (CC110, NCC behavior=toggle = latched): SYNC-ALL toggle. First tap = set
                # focused deck as Tempo Master (2293 Trigger) + Sync ON for all 4 decks (125 OnOff,
                # Hold = on while toggle is on). Second tap = MIDI 0 -> all 4 syncs OFF (Hold release).
