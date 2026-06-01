@@ -263,15 +263,21 @@ layers — only the pads change when you switch Scene/Pattern.
 | **Note Repeat** | Toggle **Cruise / Auto-DJ**. |
 | **Tempo** | **Load** the selected browser track into **Deck A**. |
 | **Enter** | **Load** the selected browser track into **Deck B**. |
-| **Dial press (Push)** | **Load** into the focused deck. |
+| **Dial press (Push), held** | **Swing-skip engage** *(v0.6)*. While the Dial is held down, turning it seeks the playhead on the deck selected by the **Swing** button (LED on = Deck A, LED off = Deck B). Uses Traktor's relative Seek Position (TID 103) for instant, quantize-free scrubbing — no Beatjump lag. Release the Dial to disengage. *(Load-to-focused-deck on Dial-press is removed in v0.6 — use Tempo = Load A, Enter = Load B.)* |
+| **Swing** | **Swing-skip A/B target** *(v0.6)*. NCC-toggle button (CC124, remapped from CC9 to clear the FX1 Dry/Wet collision). LED on = Deck A target; LED off = Deck B target. Press to flip. Sets Modifier #5. |
 | **Master ◄ / Master ►** | Browser **tree** select (navigate folders). |
 | **Browse** | Toggle the browser view/layout. |
 
 ---
 
 ## 12. The Browse knob (Dial)
-- **Turn the Dial** → scroll the browser list **both directions** (when not in Volume mode).
-- **Press the Dial** → load the selected track into the focused deck.
+The Dial has **three modes**, picked by Modifier #4:
+- **Mod#4 = 0 (default):** Turn = scroll the browser list both directions.
+- **Mod#4 = 1 (Volume button latched):** Turn = focused-deck channel volume.
+- **Mod#4 = 2 (Dial pressed and held — *new in v0.6*):** **Swing-skip.** Turn = seek the
+  playhead on the deck selected by the **Swing** button (CC124, LED on = Deck A, off = Deck B).
+  Uses Traktor's relative Seek Position (TID 103) — instant, quantize-free. Release the Dial
+  to return to whichever mode is otherwise active.
 - On the **Pattern** layer the Dial drives **Deck D** channel volume; with **Volume mode**
   latched it drives the **focused** deck's volume.
 - The Dial is a **relative (binary-offset) encoder** in the `.ncc`. If you rebuild the
@@ -311,6 +317,10 @@ browser scroll (Dial + arrows), restart, mute-all, and record-off-at-startup.
   so the pattern re-fires from step 1, release mutes — pending hardware test.
 - **Loop Recorder (F2)** — v0.5 rebuilds this page with the proper Size enum, Float
   Dry/Wet, and mirrored transport (see §8). Pending hardware test.
+- **Swing-skip (v0.6) — pending hardware test.** Dial-held-and-turned should seek the
+  Swing-selected deck via Seek Position (TID 103). Size and direction handling were tuned
+  against the proven relative-encoder CMAD (same as the browser scroll knob), but the live
+  feel — clicks-per-track and the A/B selector LED behavior — wants a hardware pass.
 - **Group A–H button colors** — the buttons render the Maschine's **native** group colors.
   Custom per-group colors require a different architecture that trades away native page
   switching; not enabled in this build.
@@ -389,6 +399,18 @@ please get in touch and it will be corrected.)*
   - Rebuilt, layer-aware **diagrams** (control map, 24 pad maps, 8 screen maps, per-layer
     cheatsheets) and a sanitized **TID reference** spreadsheet.
   - **Known alpha gap:** the Group G FX-select pads are not firing reliably yet (fix in progress).
+- **v0.6-alpha** — **Swing-skip** (pending hardware test):
+  - **Press-and-hold the Dial** to engage skip mode; turning it seeks the playhead via
+    Traktor's relative **Seek Position** (TID 103) — instant, quantize-free response (replaces
+    laggy Beatjump-on-encoder).
+  - **Swing button** is the A/B target selector — NCC-toggle (CC124, remapped from CC9 to
+    clear the FX1 Dry/Wet collision). LED on = Deck A, off = Deck B; sets Modifier #5.
+  - Dial-press repurposed Load-focused → swing-skip engage (Mod#4 = 2, Hold). Tempo = Load A,
+    Enter = Load B remain unchanged.
+  - Fully additive on the Dial: existing browse (Mod#4 = 0) and volume (Mod#4 = 1) mappings
+    are gated and still work.
+  - TID catalog notes added for Seek Position (103), Jog Turn (120), Scratch (121), Jog Touch
+    On (2187), Scratch Control On (2288), Preview seek (211) — confirmed via cmdr KnownCommands.cs.
 - **v0.5-alpha** — the FX-pad fix + Loop Recorder + a Pattern one-hit overlay (pending
   hardware test):
   - **Group G FX1 arm moved to the page button.** Pressing the Group G button now latches

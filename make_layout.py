@@ -234,7 +234,7 @@ def screenpage(group):
 def control_map():
     W,H=1340,1020
     im=Image.new("RGB",(W,H),BG); d=ImageDraw.Draw(im)
-    ctext(d,W/2,30,"GideonSTEM-Maschine — Maschine MK2 control map (ALPHA v0.5)",font(26,True),ACC)
+    ctext(d,W/2,30,"GideonSTEM-Maschine — Maschine MK2 control map (ALPHA v0.6)",font(26,True),ACC)
     ctext(d,W/2,60,"Group A-H = pick the page  ·  Scene / Pattern = pick the layer  ·  top pads 9-16 = Deck A · bottom 1-8 = Deck B",font(14),SUB)
 
     key(d,40,95,150,46,"BROWSE","toggle browser",fill="#2a2d36",tcol=ACC)
@@ -247,11 +247,11 @@ def control_map():
     ctext(d,465,196,["screen layout follows the Group button (see screen maps)"],font(11),"#4f9a73")
 
     key(d,745,95,80,46,"VOL","master")
-    key(d,835,95,80,46,"SWING","-",scol="#6b7280")
+    key(d,835,95,80,46,"SWING","A/B target  (LED on = A)",tcol=ACC,scol=TXT)
     key(d,925,95,80,46,"TEMPO","Load Deck A",tcol=ACC)
     d.ellipse([1050,95,1170,215],fill="#2a2d36",outline=ACC,width=3)
     ctext(d,1110,140,["DIAL"],font(17,True),ACC)
-    ctext(d,1110,165,["turn = browse","push = LOAD focus"],font(11),SUB)
+    ctext(d,1110,162,["turn = browse / volume / SKIP","press+hold = SWING-SKIP engage"],font(10),SUB)
     key(d,745,155,150,40,"< / >  (master)","browser tree select",tcol=TXT)
     key(d,905,155,90,40,"ENTER","Load Deck B",tcol=ACC)
 
@@ -277,7 +277,8 @@ def control_map():
 
     ctext(d,250,775,"TRANSPORT",font(14,True),ACC)
     trans=[("RESTART","jump start A+B"),("STEP <","beatjump -4"),("STEP >","beatjump +4"),
-           ("GRID","focus A<->B"),("PLAY","play focus"),("REC","recorder")]
+           ("GRID","focus A<->B"),("PLAY","play focus"),("REC","recorder"),
+           ("ERASE","Sync ALL (toggle)"),("TAP","-"),("NAV","-")]
     for i,(L,fn) in enumerate(trans):
         col=i%3; row=i//3
         key(d,60+col*200,800+row*64,185,54,L,fn,fill="#222630",tcol=TXT)
@@ -343,31 +344,35 @@ MARGIN = 80
 HEADER_H = 100
 
 def page_for_print(diagram_img, title, page_label=""):
-    p = Image.new("RGB", (PAGE_W, PAGE_H), "#ffffff")
+    # Letter LANDSCAPE so the diagram fills almost the whole page.
+    PW, PH = PAGE_H, PAGE_W   # 2200 x 1700
+    MARG = 40
+    HDR = 80
+    p = Image.new("RGB", (PW, PH), "#ffffff")
     d = ImageDraw.Draw(p)
     # header strip
-    d.rectangle([0, 0, PAGE_W, HEADER_H], fill="#16181d")
-    d.text((MARGIN, 28), "GideonSTEM-Maschine  v0.5-alpha", font=font(22, True), fill=ACC)
+    d.rectangle([0, 0, PW, HDR], fill="#16181d")
+    d.text((MARG, 22), "GideonSTEM-Maschine  v0.6-alpha", font=font(22, True), fill=ACC)
     if page_label:
         tw = d.textlength(page_label, font=font(20, True))
-        d.text((PAGE_W - MARGIN - tw, 28), page_label, font=font(20, True), fill=SUB)
+        d.text((PW - MARG - tw, 22), page_label, font=font(20, True), fill=SUB)
     # title under header
-    d.text((MARGIN, HEADER_H + 24), title, font=font(28, True), fill="#16181d")
-    # fit diagram into the remaining area (below title) preserving aspect
-    body_top = HEADER_H + 90
-    body_bottom = PAGE_H - 60
-    body_w = PAGE_W - 2 * MARGIN
+    d.text((MARG, HDR + 16), title, font=font(30, True), fill="#16181d")
+    # diagram nearly fills the page below the title
+    body_top = HDR + 70
+    body_bottom = PH - 42
+    body_w = PW - 2 * MARG
     body_h = body_bottom - body_top
     iw, ih = diagram_img.size
     scale = min(body_w / iw, body_h / ih)
     nw, nh = int(iw * scale), int(ih * scale)
     resized = diagram_img.resize((nw, nh), Image.LANCZOS)
-    x = (PAGE_W - nw) // 2
+    x = (PW - nw) // 2
     y = body_top + (body_h - nh) // 2
     p.paste(resized, (x, y))
     # footer
-    d.text((MARGIN, PAGE_H - 40), "github.com/gbroeckling/GideonSTEM-Maschine",
-           font=font(14), fill="#666")
+    d.text((MARG, PH - 30), "github.com/gbroeckling/GideonSTEM-Maschine",
+           font=font(13), fill="#666")
     return p
 
 def build_pdf(name, items):
@@ -392,7 +397,33 @@ build_pdf("printable_scene",   [(scene_imgs[i],   f"SCENE  —  Group {g}2",  f"
 build_pdf("printable_pattern", [(pattern_imgs[i], f"PATTERN  —  Group {g}3",f"{i+1} / 8") for i, g in enumerate("ABCDEFGH")])
 build_pdf("printable_screens", [(screen_imgs[i],  f"SCREEN  —  Group {g}",  f"{i+1} / 8") for i, g in enumerate("ABCDEFGH")])
 
+# ---------------- DJTT LISTING-IMAGE CHUNKS (tall layout split into page-sized portions) ----
+# Each chunk has the aspect of a US-letter portrait page (8.5:11 = 1700:2200). The full
+# layout_guide.png is one tall image; chunking it lets djtt show it as a sequence of
+# screen-sized blocks instead of one endless scroll.
+def chunk_listing_image(full_img, out_prefix="listing_chunk", letter_aspect=(1700, 2200)):
+    fw, fh = full_img.size
+    target_w = fw
+    target_h = int(round(fw * letter_aspect[1] / letter_aspect[0]))  # height matching letter aspect
+    n_chunks = max(1, (fh + target_h - 1) // target_h)
+    chunks = []
+    for i in range(n_chunks):
+        y0 = i * target_h
+        y1 = min(y0 + target_h, fh)
+        # If the last chunk is short, pad with BG so all chunks share the same aspect
+        chunk = Image.new("RGB", (target_w, target_h), BG)
+        crop = full_img.crop((0, y0, target_w, y1))
+        chunk.paste(crop, (0, 0))
+        path = f"{OUT}/{out_prefix}_{i+1}_of_{n_chunks}.png"
+        chunk.save(path)
+        chunks.append(chunk)
+    return chunks
+
+layout_guide_img = Image.open(f"{OUT}/layout_guide.png")
+chunks = chunk_listing_image(layout_guide_img)
+print(f"  + {len(chunks)} listing-image chunks (letter-aspect each, for djtt body embeds)")
+
 n=len(PAD)+len(SCREENS)+1
 print(f"WROTE {OUT}/: control_map + {len(PAD)} pad pages + {len(SCREENS)} screens + 4 cheatsheets + layout_guide")
-print(f"  + 5 printable PDFs (full set + per-layer)")
+print(f"  + 5 printable PDFs (full set + per-layer, letter LANDSCAPE — diagram fills the page)")
 print(f"  = {n} core panels documenting 24 pad-pages and 8 screen-pages across 3 layers.")
