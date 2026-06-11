@@ -1440,21 +1440,28 @@ def patch_ncc(path):
     PAGE_CH = {'A': 2, 'B': None, 'C': 3, 'D': 4, 'E': 5, 'F': 6, 'G': 7, 'H': 8}  # B stays Ch01
     PAGE_ORDER = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
-    def _color_pad_leds(block, colors):
-        # For each Pad LED block: (1) set the color to direct ARGB (on==off => idle color IS
-        # the hue), and (2) light it at rest by forcing default/last brightness to 127. Boot
-        # value 0 = brightness 0 = DARK was why prior on==off hue experiments "went dead":
-        # an input-only pad has no Traktor LED-feedback to raise its brightness, so it needs a
-        # lit default. State-driven pads (e.g. stem mutes) are corrected by Traktor once synced.
+    def _color_pad_leds(block, colors, off_colors=None):
+        # For each Pad LED block: set direct-ARGB color-on (the hue). By default color-off ==
+        # color-on, so the idle color IS the hue and the pad glows statically. Pass off_colors to
+        # give a DIFFERENT (e.g. dark) off-color — REQUIRED for any pad that must render a VU/level
+        # meter: the meter fades color-off (low level) -> color-on (high level) and is INVISIBLE
+        # when off==on. default/last forced to 127 so the pad lights at rest (= shows color-on).
         def _repl(m):
-            argb = colors[int(m.group('pid')) - 1]
+            i = int(m.group('pid')) - 1
+            on = colors[i]
+            off = off_colors[i] if off_colors else colors[i]
             led = m.group(0)
             led = re.sub(r'color-mode="\d+" color-on(?:-index)?="\d+" color-off(?:-index)?="\d+"',
-                         f'color-mode="0" color-on="{argb}" color-off="{argb}"', led)
+                         f'color-mode="0" color-on="{on}" color-off="{off}"', led)
             led = re.sub(r'<default>\d+</default>', '<default>127</default>', led)
             led = re.sub(r'<last>\d+</last>', '<last>127</last>', led)
             return led
         return re.sub(r'<led version="1" id="Pad(?P<pid>\d+)[BHS]">.*?</led>', _repl, block, flags=re.S)
+
+    # G page also hosts the Duplicate-toggled VU: its pads need a DARK color-off so the level
+    # value renders as a fading bar (off==on shows no movement). At rest (value 127) they still
+    # show color-on = the full FX spectrum, so the FX page looks unchanged until the VU drives it.
+    VU_OFF = [_dim(c, 0.12) for c in PAGE_COLORS['G']]
 
     for idx, letter in enumerate(PAGE_ORDER):
         nxt = PAGE_ORDER[idx + 1] if idx + 1 < len(PAGE_ORDER) else None
@@ -1467,9 +1474,11 @@ def patch_ncc(path):
         if ch is not None:
             blk = re.sub(r'(<pad subtype="trigger"[^>]*>\s*<note>\d+</note>\s*<channel>)0(</channel>)',
                          rf'\g<1>{ch}\g<2>', blk)            # re-channel input pads
-        blk = _color_pad_leds(blk, PAGE_COLORS[letter])      # ARGB pad colors
+        blk = _color_pad_leds(blk, PAGE_COLORS[letter],
+                              off_colors=VU_OFF if letter == 'G' else None)   # G: dark off for VU
         content = content[:g0] + blk + content[g1:]
-        print(f"  [NCC] Group {letter} -> Ch{(ch + 1) if ch is not None else 1:02d}, ARGB pad colors")
+        print(f"  [NCC] Group {letter} -> Ch{(ch + 1) if ch is not None else 1:02d}, ARGB pad colors"
+              + (" (+dark off for VU)" if letter == 'G' else ""))
 
     # --- MK1 PORT: re-channel the MK1 ("Maschine Controller") pads exactly like the MK2 so
     # all 8 pad pages work with the UNCHANGED TSI. MK1 sends the same transport CCs (Play 108,
@@ -1759,7 +1768,8 @@ perf_map = (
                # Post-Fader Level L+R) — the prior 2704 was a clip indicator, hence always dark.
                ("Ch01.CC.116", 0, MOD6, _cmad_setmod2(1))]
             # Per-deck VU (Deck A left / Deck B right) on the FX-page (G) pads, only while Duplicate
-            # is latched on. Gated Mod#6==1 -> inert otherwise. Group H untouched.
+            # is latched on. Gated Mod#6==1 -> inert otherwise. Group H untouched. The G pads carry
+            # a dark color-off (set in patch_ncc) so the level value actually renders as a meter.
             + _gate_list(_vu_overlay(84), MOD6, 1))
 devi_loops = build_device_raw("Maschine MK2 Performance", 0, perf_map)
 print(f"  Performance: {len(perf_map)} mappings across pad pages A-H")
