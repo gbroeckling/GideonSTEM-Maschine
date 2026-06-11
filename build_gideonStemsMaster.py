@@ -1340,39 +1340,80 @@ def patch_ncc(path):
     content = content[:mk2grp] + seg0 + content[mk2grpe:]
     print(f"  [NCC] MK2 pad LEDs normalized to mode 0 (interactive) — {n0} units")
 
-    gb = content.find('<group name="Pad Page B"', mk2sec)
-    gc = content.find('<group name="Pad Page C"', gb)
-    if mk2sec != -1 and gb != -1 and gc != -1:
-        block = content[gb:gc]
-        for pid in range(1, 17):
-            color = pid   # Pad1..16 -> palette index 1..16  (Deck B=1-8, Deck A=9-16)
-            block = re.sub(
-                rf'(<led version="1" id="Pad{pid}[BHS]">\s*<display type="0">\s*<unit color-type="\d+" color-mode="\d+" color-on-index=")\d+(" color-off-index=")\d+(")',
-                rf'\g<1>{color}\g<2>{color}\g<3>', block)
-        content = content[:gb] + block + content[gc:]
-        print("  [NCC] Group B colors -> per-pad palette discovery (Deck B=idx1-8, Deck A=idx9-16)")
+    # === THE COLOR FIX =====================================================================
+    # Pad colors use the SAME direct-ARGB color-on/color-off form that already works on the
+    # Group A-H BUTTONS (color-on="<decimal ARGB>"), NOT the indexed palette (color-on-index).
+    # On the MK2 the indexed palette is undocumented and renders wrong/dim; direct ARGB lights
+    # each pad in its true hue AT REST (on==off => the idle color IS the hue) with no Traktor
+    # output mapping needed - exactly how the group buttons glow. Each Group also moves to its
+    # own MIDI channel (kills cross-page note overlap); Group B stays on Ch01.
+    def _argb(r, g, b): return 0xFF000000 | (r << 16) | (g << 8) | b
+    # vivid NI 7-bit palette (channels 0-127)
+    BLUE   = _argb(0, 40, 127);   CYAN   = _argb(0, 110, 120); RED    = _argb(127, 0, 0)
+    GREEN  = _argb(0, 120, 28);   AMBER  = _argb(127, 64, 0);  ORANGE = _argb(127, 32, 0)
+    VIOLET = _argb(78, 0, 127);   MAGENTA= _argb(127, 0, 88);  TEAL   = _argb(0, 120, 88)
+    WHITE  = _argb(96, 96, 96);   SKY    = _argb(0, 96, 127)
 
-    # --- Pad pages A,C-H: each on its OWN channel (kills cross-page note overlap) + per-deck
-    # colors (Deck A top / Deck B bottom). B keeps its discovery colors set above. Colors are
-    # provisional indices (palette TBD from hardware). (letter, next, channel, DeckA, DeckB) ---
-    PAGES = [('A', 'B', 2, 6, 5), ('C', 'D', 3, 11, 2), ('D', 'E', 4, 8, 7),
-             ('E', 'F', 5, 10, 9), ('F', 'G', 6, 4, 3), ('G', 'H', 7, 14, 13),
-             ('H', None, 8, 16, 15)]
-    for letter, nxt, ch, ca, cb in PAGES:
+    def _grad(c0, c1, n=8):
+        """Linear ARGB ramp from c0 to c1 over n steps (per-deck size gradient)."""
+        ch = lambda x, s: (x >> s) & 0xFF
+        out = []
+        for i in range(n):
+            t = i / (n - 1)
+            out.append(_argb(round(ch(c0,16)*(1-t)+ch(c1,16)*t),
+                             round(ch(c0,8)*(1-t)+ch(c1,8)*t),
+                             round(ch(c0,0)*(1-t)+ch(c1,0)*t)))
+        return out
+
+    STEM  = [BLUE, RED, GREEN, AMBER]    # Drums, Bass, Other, Vocals (Traktor stem colors)
+    XPORT = [GREEN, RED, SKY, AMBER]     # Play, Cue, Sync, Flux
+
+    # 16 colors per page (Pad1-8 = Deck B / bottom rows, Pad9-16 = Deck A / top rows).
+    PAGE_COLORS = {
+        'A': STEM + STEM + STEM + STEM,                    # per-stem x (mute,filter) x 2 decks
+        'B': _grad(BLUE, CYAN) + _grad(BLUE, CYAN),        # loop size: small blue -> large cyan
+        'C': _grad(AMBER, ORANGE) + _grad(AMBER, ORANGE),  # beatjump: small amber -> big orange
+        'D': [VIOLET] * 16,                                # remix grid
+        'E': [CYAN] * 16,                                  # key shift (reset pads overridden below)
+        'F': [TEAL] * 16,                                  # loop station
+        'G': [MAGENTA] * 16,                               # FX selector
+        'H': XPORT + XPORT + XPORT + XPORT,                # transport: play/cue/sync/flux
+    }
+    PAGE_COLORS['E'][4] = WHITE; PAGE_COLORS['E'][12] = WHITE   # key-0 reset pads stand out
+
+    PAGE_CH = {'A': 2, 'B': None, 'C': 3, 'D': 4, 'E': 5, 'F': 6, 'G': 7, 'H': 8}  # B stays Ch01
+    PAGE_ORDER = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+
+    def _color_pad_leds(block, colors):
+        # For each Pad LED block: (1) set the color to direct ARGB (on==off => idle color IS
+        # the hue), and (2) light it at rest by forcing default/last brightness to 127. Boot
+        # value 0 = brightness 0 = DARK was why prior on==off hue experiments "went dead":
+        # an input-only pad has no Traktor LED-feedback to raise its brightness, so it needs a
+        # lit default. State-driven pads (e.g. stem mutes) are corrected by Traktor once synced.
+        def _repl(m):
+            argb = colors[int(m.group('pid')) - 1]
+            led = m.group(0)
+            led = re.sub(r'color-mode="\d+" color-on(?:-index)?="\d+" color-off(?:-index)?="\d+"',
+                         f'color-mode="0" color-on="{argb}" color-off="{argb}"', led)
+            led = re.sub(r'<default>\d+</default>', '<default>127</default>', led)
+            led = re.sub(r'<last>\d+</last>', '<last>127</last>', led)
+            return led
+        return re.sub(r'<led version="1" id="Pad(?P<pid>\d+)[BHS]">.*?</led>', _repl, block, flags=re.S)
+
+    for idx, letter in enumerate(PAGE_ORDER):
+        nxt = PAGE_ORDER[idx + 1] if idx + 1 < len(PAGE_ORDER) else None
         g0 = content.find(f'<group name="Pad Page {letter}"', mk2sec)
         g1 = content.find(f'<group name="Pad Page {nxt}"', g0) if nxt else content.find('</groups>', g0)
         if g0 == -1 or g1 == -1:
             print(f"  [NCC] Group {letter}: NOT FOUND"); continue
         blk = content[g0:g1]
-        blk = re.sub(r'(<pad subtype="trigger"[^>]*>\s*<note>\d+</note>\s*<channel>)0(</channel>)',
-                     rf'\g<1>{ch}\g<2>', blk)               # re-channel input pads
-        for pid in range(1, 17):
-            c = ca if pid >= 9 else cb                       # Pad9-16=Deck A, Pad1-8=Deck B
-            blk = re.sub(
-                rf'(<led version="1" id="Pad{pid}[BHS]">\s*<display type="0">\s*<unit color-type="\d+" color-mode="\d+" color-on-index=")\d+(" color-off-index=")\d+(")',
-                rf'\g<1>{c}\g<2>{c}\g<3>', blk)
+        ch = PAGE_CH[letter]
+        if ch is not None:
+            blk = re.sub(r'(<pad subtype="trigger"[^>]*>\s*<note>\d+</note>\s*<channel>)0(</channel>)',
+                         rf'\g<1>{ch}\g<2>', blk)            # re-channel input pads
+        blk = _color_pad_leds(blk, PAGE_COLORS[letter])      # ARGB pad colors
         content = content[:g0] + blk + content[g1:]
-        print(f"  [NCC] Group {letter} -> Ch{ch+1:02d}, Deck A=idx{ca}/Deck B=idx{cb}")
+        print(f"  [NCC] Group {letter} -> Ch{(ch + 1) if ch is not None else 1:02d}, ARGB pad colors")
 
     # --- MK1 PORT: re-channel the MK1 ("Maschine Controller") pads exactly like the MK2 so
     # all 8 pad pages work with the UNCHANGED TSI. MK1 sends the same transport CCs (Play 108,
@@ -1429,25 +1470,9 @@ def patch_ncc(path):
     # Group G + breaking pad colors. G is now a normal mode-0 colored page (no VU). Do NOT
     # re-add a pad VU on the MK2 without an actual working MK2 reference to copy.
 
-    # Group E (key page): all key-shift pads one matching color; the reset pad (key 0 ->
-    # Pad5=note64/E4 deck B, Pad13=note72/C5 deck A) a DIFFERENT color so it stands out. (mode 0)
-    e0 = content.find('<group name="Pad Page E"', mk2sec)
-    e1 = content.find('<group name="Pad Page F"', e0)
-    if e0 != -1 and e1 != -1:
-        blk = content[e0:e1]
-        for pid in range(1, 17):
-            col = 4 if pid in (5, 13) else 6   # reset pads = idx4 (distinct), shifts = idx6 (matching)
-            blk = re.sub(
-                rf'(<led version="1" id="Pad{pid}[BHS]">\s*<display type="0">\s*<unit color-type="\d+" color-mode=")\d+(" color-on-index=")\d+(" color-off-index=")\d+(")',
-                rf'\g<1>0\g<2>{col}\g<3>{col}\g<4>', blk)
-        content = content[:e0] + blk + content[e1:]
-        print("  [NCC] Group E -> shifts idx6 matching, reset (Pad5/Pad13) idx4 distinct")
-
-    # (Pad colors stay color-mode 0: one native color per page, INTERACTIVE press lighting.
-    # Mode-1/2 with on==off rendered distinct hues but went "dead" - input-only pad pages have
-    # no Traktor LED feedback to drive the on-state, so the press-lighting is lost. Keeping the
-    # interactive mode-0 look. Vivid distinct colors WITH interactivity would need per-pad
-    # state-LED output mappings - a separate, bigger job, offered if wanted.)
+    # (Group E key-page reset pads are colored WHITE in PAGE_COLORS above; all other key-shift
+    # pads share the page's CYAN. Pad colors are direct-ARGB mode-0: the idle color IS the hue,
+    # so every pad glows its true color at rest with no Traktor LED-feedback output mapping.)
 
     # Transport/master buttons were NCC 'toggle' (latches 127/0); with a Traktor Toggle mapping
     # that needs TWO presses per action. Switch them to 'gate' so each press fires once.
