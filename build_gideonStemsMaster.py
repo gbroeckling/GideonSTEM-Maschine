@@ -376,17 +376,6 @@ def _pitchplay_mappings():
             m.append((_note_lbl(base + i, 5), 0, 402, _cmad_keyplay(deck, s)))
     return m
 
-def _looproll_mappings():
-    """Group F (Ch07, notes 72-87). Fixed-size loop roll, sizes 1/16..8 (indices 1-8).
-    Shifted up one notch from 1/32..4 — fastest is now 1/16 (1/32 was too fast).
-    NOTE: round-1 moved this OFF page F (F is now loop+memories); destined for B2 in round 2."""
-    m = []
-    for base, deck in ((72, 1), (80, 0)):
-        for i in range(8):
-            m.append((_note_lbl(base + i, 6), 0, 2317, _cmad_loop_size(deck, i + 1)))
-    return m
-
-
 def _gate(cmad, modid, val):
     """Gate a CMAD by a Traktor modifier — fires only when modifier == val. Condition slot
     (commentLen=0 CMAD): @52 = ModId (2547+N, e.g. Mod#2 = 2549), @56 = cmp (0 = equals),
