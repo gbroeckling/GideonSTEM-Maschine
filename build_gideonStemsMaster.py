@@ -573,14 +573,15 @@ _VU_TEMPLATE = bytes.fromhex(
     '000000040000ffff000000080000000000000000000000000000000040a000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000023ecccccd000000023f000000000000000000007f0000000000000001000000023d80000000000000')
 
 def _cmad_vu(level, deck=0):
-    """LED metering output for a deck-level meter (TID 2713 = Deck Post-Fader Level L+R). Segment
-    `level` (1..8) = a rising threshold that fades up to FULL. Band = [ (level-1)/8 , 1.0 ] —
-    overlapping bands, rising Min, Max always 1.0, so the blend fades smoothly = visible movement.
-    `deck` (@12) targets the deck whose level drives this segment (0=A,1=B,2=C,3=D)."""
-    b = bytearray(_VU_TEMPLATE)
+    """VU segment for a deck-level meter (TID 2713 = Deck Post-Fader Level L+R), built on the
+    PROVEN `_cmad_led_out` output template — the SAME signature that drives the working stem-mute
+    LEDs on this hardware (ControllerType=LED, Interaction=Output, LedBlend=threshold). Earlier the
+    VU used a different, unverified "metering" template (_VU_TEMPLATE, fade blend) that may not
+    render on the MK2; this rides the output path known to light. The pad turns on when the deck's
+    post-fader level crosses (level-1)/8 -> a binary 8-segment bar. deck @12, threshold @80."""
+    b = bytearray(_cmad_led_out(0))                   # proven LED-output template (drives mute LEDs)
     b[12:16] = struct.pack('>i', deck)                # which deck's level drives this segment
-    b[80:84] = struct.pack('>f', (level - 1) / 8.0)   # LedMinControllerRange (rising threshold)
-    b[88:92] = struct.pack('>f', 1.0)                 # LedMaxControllerRange = 1.0 (fade to full)
+    b[80:84] = struct.pack('>f', (level - 1) / 8.0)   # LedMinControllerRange = this segment's threshold
     assert len(b) == 120
     return bytes(b)
 
