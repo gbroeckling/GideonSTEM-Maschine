@@ -55,7 +55,6 @@ CC RANGES USED (MIDI Ch02 — free from performance and hardware conflicts):
 
 import struct, base64, re, shutil, os
 
-REYBANS_TSI = "Reybans_Maschine_MK2_reference.tsi"   # upstream source we derive device blobs from
 INPUT_NCC   = "gideonSTEMsMaster.ncc"
 OUTPUT_TSI  = "gideonSTEMsMaster.tsi"
 OUTPUT_NCC  = "gideonSTEMsMaster.ncc"   # patched in place
@@ -1085,39 +1084,6 @@ def _stems_mappings(deck):
         m.append((f"Ch02.CC.{vol3[i]:03d}", 0, 251, _cmad_volume_rel(slot)))
 
     return m   # 13 entries per slot x 4 slots = 52 per deck
-
-
-# ---------------------------------------------------------------------------
-# Parse Reybans TSI — extract raw DEVI blobs (no rebuild, byte-perfect)
-# ---------------------------------------------------------------------------
-
-def parse_reybans_raw(path):
-    """Return list of (name, raw_devi_bytes) for all devices in the TSI.
-    The raw bytes are used as-is so performance mappings are 100% original.
-    """
-    with open(path, "rb") as f:
-        raw = f.read()
-    m = re.search(rb'Value="([A-Za-z0-9+/=]+)"', raw)
-    data = base64.b64decode(m.group(1))
-
-    # DIOM header (8) + DIOI frame (12) = 20 bytes, then DEVS frame
-    devs_offset = 20
-    devs_len = struct.unpack('>I', data[devs_offset+4:devs_offset+8])[0]
-    devs_data = data[devs_offset+8:devs_offset+8+devs_len]
-
-    ndev = struct.unpack('>I', devs_data[:4])[0]
-    dp = 4
-    result = []
-    for _ in range(ndev):
-        devi_len = struct.unpack('>I', devs_data[dp+4:dp+8])[0]
-        blob = devs_data[dp:dp+8+devi_len]   # DEVI tag + length + payload
-        name = "Unknown"
-        ddic_idx = blob.find(b'DDIC')
-        if ddic_idx >= 0:
-            name, _ = read_utf16(blob, ddic_idx+8)
-        result.append((name, blob))
-        dp += 8 + devi_len
-    return result
 
 
 # ---------------------------------------------------------------------------
