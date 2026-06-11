@@ -98,6 +98,22 @@ switching → all paging sticks on one page.** We therefore **REMOVE** it (funct
 cosmetics). Consequence: the Group buttons show the **native Maschine colors**, and custom
 per-group colors are NOT possible without re-architecting paging onto modifiers.
 
+### Pad colors — the mechanism that finally worked (2026-06-10)
+The 16 **pads** (unlike the A–H group buttons) are NOT affected by `handleGroupControls`, so
+they CAN be colored. The long-standing failure was using the wrong NCC form: pad LEDs were
+set with the **indexed palette** (`color-on-index="N"`), which on the MK2 is undocumented and
+renders wrong/dim. The fix (`_color_pad_leds` in `patch_ncc`):
+1. **Direct ARGB** — `color-on="<decimal>"` / `color-off="<decimal>"`, ARGB =
+   `0xFF000000 | r<<16 | g<<8 | b` (channels 0–127). `on==off`, so the **idle color IS the
+   hue** — the same form already proven on the A–H group buttons. Each page gets a deliberate
+   scheme (stems = Traktor stem colors, loops/beatjump = size gradients, etc.).
+2. **Lit at rest** — pad LED `<default>`/`<last>` forced to **127**. Boot value 0 = brightness
+   0 = dark was why earlier on==off hue attempts "rendered but went dead": an input-only pad
+   has no Traktor LED-feedback to raise its brightness, so it needs a lit default.
+**Status: needs hardware confirmation.** If pads are still dark, the remaining hypothesis is
+that the LED must use **HSB mode** driving the H/S/B sub-LED triplet (channels 0/1/2) instead
+of mode-0 ARGB.
+
 ### Default display page
 The MK2 always boots to **display page index 0**, ignoring a stored `current_index`. So
 "Stems Full Mix is the default" is achieved by **ordering** Full Mix first in `_ALL_PAGES`
@@ -223,9 +239,15 @@ NOT stored here). Authenticated session uses `djtt/cookies.txt` + `curl --ssl-no
   label, and the extrapolated pattern-position floats in `_cmad_fxpattern`).
 - **FX screen pages (F/G/H)** — original, from proven CMAD helpers + verified FX-unit-in-deck-field
   encoding; verify On/Dry-Wet/Knobs/Buttons for all 4 units on hardware.
+- **Pad colors** — FIXED 2026-06-10 (direct ARGB + lit default; see §3 "Pad colors"). All 24
+  pad pages now glow a deliberate per-page color at rest. **Verify on hardware**; if dark, try
+  HSB mode (§3). Colors do NOT change per Scene/Pattern layer (layers are Traktor-side modifiers
+  invisible to the NCC; the pad color is fixed per group page).
 - **Custom A–H button colors** — not possible without `handleGroupControls`, which breaks the
   native *group* switching (§3, Axis 1). Layers use a modifier; the group still needs the channel
-  switch, so custom colors would still require re-architecting group paging.
+  switch, so custom colors would still require re-architecting group paging. (The build *does*
+  set ARGB on the group buttons, but native switching may override them — pads are the reliable
+  color surface.)
 - **Grid / Play LEDs** — output mappings present (Grid lit on Deck B focus; Play green on play);
   verify on hardware.
 - **Stems Full Mix default** — handled via page order; confirm it boots correctly on hardware.
