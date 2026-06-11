@@ -582,10 +582,18 @@ def _vu_mappings():
     Drives BOTH pad LED variants per pad — Ch03 (PadNB) and Ch01 (PadNH) — with the metering
     recipe, since on the MK2 the visible/responsive LED variant is uncertain (#10371 used both:
     Ch01 for color, Ch03 for level). Whichever variant responds, the bar fills with level."""
+    return _vu_overlay(84)
+
+def _vu_overlay(base):
+    """Stereo master VU on the 16 pads of one page (notes base..base+15). Left two columns =
+    Main Level L (2704), right two = Main Level R (2705); 8 rising-threshold segments per side.
+    Drives BOTH brightness/hue LED channels (Ch03 PadNB + Ch01 PadNH) so whichever responds
+    fills the bar. Used as a Duplicate-toggled overlay (gated Mod#6==1 by the caller), so it only
+    paints the pads while the Duplicate button is latched on; otherwise the page's colors show."""
     m = []
     for tid, pads in ((2704, _VU_LEFT), (2705, _VU_RIGHT)):
         for i, pad in enumerate(pads):
-            note = 84 + (pad - 1)
+            note = base + (pad - 1)
             cmad = _cmad_vu(i + 1)
             m.append((_note_lbl(note, 2), 1, tid, cmad))   # Ch03 PadNB, level 1..8
             m.append((_note_lbl(note, 0), 1, tid, cmad))   # Ch01 PadNH, level 1..8
@@ -912,6 +920,7 @@ def _cmad_fxon(field, interaction=2):
 MOD3 = 2550   # Traktor Modifier #3 — FX1 "engage" state (0 = off, 1 = engaged)
 MOD4 = 2551   # Traktor Modifier #4 — Dial mode: 0 = browse, 1 = volume (Volume CC7), 2 = swing-skip (Swing CC9 held)
 MOD5 = 2552   # Traktor Modifier #5 — swing-skip A/B target (1 = Deck A, 0 = Deck B), flips each Swing press
+MOD6 = 2553   # Traktor Modifier #6 — VU-meter overlay (1 = on). Toggled by the Duplicate button (CC116).
 # Continuous SEEK command for the responsive Dial-skip (replaces laggy Beatjump 2380, which is a
 # Hold/Enum trigger and accumulates on a relative encoder). TID 103 = "Seek Position (Deck Common)",
 # a FloatInCommand<FloatRangeRelative> — confirmed authoritative via cmdr KnownCommands.cs, and seen
@@ -1733,7 +1742,17 @@ perf_map = (
                ("Ch01.CC.110", 0, 125,  _cmad_btn(1, 2)),    # Deck B Sync (Hold)
                ("Ch01.CC.110", 0, 125,  _cmad_btn(2, 2)),    # Deck C Sync (Hold)
                ("Ch01.CC.110", 0, 125,  _cmad_btn(3, 2)),    # Deck D Sync (Hold)
-               ("Ch01.CC.110", 1, 125,  _cmad_led_out(0))])  # Erase LED -> Deck A sync state
+               ("Ch01.CC.110", 1, 125,  _cmad_led_out(0)),   # Erase LED -> Deck A sync state
+               # Duplicate (CC116) = VU-meter overlay switch (Mod#6). The NCC keeps Duplicate as a
+               # TOGGLE button, so its own LED latches on while the meters are active (what the user
+               # asked for). CRITICAL: this does NOT touch the NCC pad colors / color-mode — that is
+               # what broke earlier VU attempts (they forced color-mode 2 and blanked the pads). Here
+               # the VU is PURE Traktor output gated Mod#6==1, so when Duplicate is OFF these mappings
+               # emit nothing and cannot affect the colors or any other mapping.
+               ("Ch01.CC.116", 0, MOD6, _cmad_setmod2(1))]
+            # Stereo master VU (Main L/R) painted on the FX-page (Group G) pads ONLY while Duplicate
+            # is latched on. Gated Mod#6==1 -> completely inert otherwise. Group H left untouched.
+            + _gate_list(_vu_overlay(84), MOD6, 1))
 devi_loops = build_device_raw("Maschine MK2 Performance", 0, perf_map)
 print(f"  Performance: {len(perf_map)} mappings across pad pages A-H")
 
