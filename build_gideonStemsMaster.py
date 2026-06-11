@@ -572,12 +572,13 @@ _VU_LEVEL_COLOR = {1: 4, 2: 5, 3: 6, 4: 3, 5: 2, 6: 7, 7: 1, 8: 1}  # mode1: 1-6
 _VU_TEMPLATE = bytes.fromhex(
     '000000040000ffff000000080000000000000000000000000000000040a000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000023ecccccd000000023f000000000000000000007f0000000000000001000000023d80000000000000')
 
-def _cmad_vu(level):
-    """LED metering output. Segment `level` (1..8) = a rising threshold that fades up to FULL.
-    Band = [ (level-1)/8 , 1.0 ] — matches the WORKING #3589 VU (overlapping bands, rising Min,
-    Max always 1.0). A wide band makes the blend fade smoothly across the level range = visible
-    movement; the old disjoint narrow bands [k/8,(k+1)/8] snapped full instantly (looked static)."""
+def _cmad_vu(level, deck=0):
+    """LED metering output for a deck-level meter (TID 2713 = Deck Post-Fader Level L+R). Segment
+    `level` (1..8) = a rising threshold that fades up to FULL. Band = [ (level-1)/8 , 1.0 ] —
+    overlapping bands, rising Min, Max always 1.0, so the blend fades smoothly = visible movement.
+    `deck` (@12) targets the deck whose level drives this segment (0=A,1=B,2=C,3=D)."""
     b = bytearray(_VU_TEMPLATE)
+    b[12:16] = struct.pack('>i', deck)                # which deck's level drives this segment
     b[80:84] = struct.pack('>f', (level - 1) / 8.0)   # LedMinControllerRange (rising threshold)
     b[88:92] = struct.pack('>f', 1.0)                 # LedMaxControllerRange = 1.0 (fade to full)
     assert len(b) == 120
@@ -590,19 +591,22 @@ def _vu_mappings():
     Ch01 for color, Ch03 for level). Whichever variant responds, the bar fills with level."""
     return _vu_overlay(84)
 
+VU_TID = 2713   # Deck Post-Fader Level (L+R) — the REAL level meter. (The old 2704 was "Master
+                # Out CLIP (L+R)", a clip light that only fires when clipping — why the VU was dark.)
+
 def _vu_overlay(base):
-    """Stereo master VU on the 16 pads of one page (notes base..base+15). Left two columns =
-    Main Level L (2704), right two = Main Level R (2705); 8 rising-threshold segments per side.
-    Drives BOTH brightness/hue LED channels (Ch03 PadNB + Ch01 PadNH) so whichever responds
-    fills the bar. Used as a Duplicate-toggled overlay (gated Mod#6==1 by the caller), so it only
-    paints the pads while the Duplicate button is latched on; otherwise the page's colors show."""
+    """Per-deck VU on the 16 pads of one page (notes base..base+15): LEFT two columns = Deck A
+    post-fader level, RIGHT two = Deck B level; 8 rising-threshold segments per side. Drives BOTH
+    brightness/hue LED channels (Ch03 PadNB + Ch01 PadNH) so whichever responds fills the bar.
+    Used as a Duplicate-toggled overlay (gated Mod#6==1 by the caller): only paints while Duplicate
+    is latched on; otherwise the page's colors show."""
     m = []
-    for tid, pads in ((2704, _VU_LEFT), (2705, _VU_RIGHT)):
+    for deck, pads in ((0, _VU_LEFT), (1, _VU_RIGHT)):   # Deck A left, Deck B right
         for i, pad in enumerate(pads):
             note = base + (pad - 1)
-            cmad = _cmad_vu(i + 1)
-            m.append((_note_lbl(note, 2), 1, tid, cmad))   # Ch03 PadNB, level 1..8
-            m.append((_note_lbl(note, 0), 1, tid, cmad))   # Ch01 PadNH, level 1..8
+            cmad = _cmad_vu(i + 1, deck=deck)
+            m.append((_note_lbl(note, 2), 1, VU_TID, cmad))   # Ch03 PadNB, level 1..8
+            m.append((_note_lbl(note, 0), 1, VU_TID, cmad))   # Ch01 PadNH, level 1..8
     return m
 
 def _transport_mappings():
@@ -1748,7 +1752,15 @@ perf_map = (
                ("Ch01.CC.110", 0, 125,  _cmad_btn(1, 2)),    # Deck B Sync (Hold)
                ("Ch01.CC.110", 0, 125,  _cmad_btn(2, 2)),    # Deck C Sync (Hold)
                ("Ch01.CC.110", 0, 125,  _cmad_btn(3, 2)),    # Deck D Sync (Hold)
-               ("Ch01.CC.110", 1, 125,  _cmad_led_out(0))])  # Erase LED -> Deck A sync state
+               ("Ch01.CC.110", 1, 125,  _cmad_led_out(0)),   # Erase LED -> Deck A sync state
+               # Duplicate (CC116) = VU-meter overlay toggle (Mod#6). NCC keeps Duplicate as a
+               # toggle so its own LED latches on while active. Pure Traktor OUTPUT gated Mod#6==1
+               # (does NOT touch NCC colors). Now driven by the CORRECT level meter (2713 Deck
+               # Post-Fader Level L+R) — the prior 2704 was a clip indicator, hence always dark.
+               ("Ch01.CC.116", 0, MOD6, _cmad_setmod2(1))]
+            # Per-deck VU (Deck A left / Deck B right) on the FX-page (G) pads, only while Duplicate
+            # is latched on. Gated Mod#6==1 -> inert otherwise. Group H untouched.
+            + _gate_list(_vu_overlay(84), MOD6, 1))
 devi_loops = build_device_raw("Maschine MK2 Performance", 0, perf_map)
 print(f"  Performance: {len(perf_map)} mappings across pad pages A-H")
 
