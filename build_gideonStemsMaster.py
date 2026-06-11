@@ -1748,17 +1748,7 @@ perf_map = (
                ("Ch01.CC.110", 0, 125,  _cmad_btn(1, 2)),    # Deck B Sync (Hold)
                ("Ch01.CC.110", 0, 125,  _cmad_btn(2, 2)),    # Deck C Sync (Hold)
                ("Ch01.CC.110", 0, 125,  _cmad_btn(3, 2)),    # Deck D Sync (Hold)
-               ("Ch01.CC.110", 1, 125,  _cmad_led_out(0)),   # Erase LED -> Deck A sync state
-               # Duplicate (CC116) = VU-meter overlay switch (Mod#6). The NCC keeps Duplicate as a
-               # TOGGLE button, so its own LED latches on while the meters are active (what the user
-               # asked for). CRITICAL: this does NOT touch the NCC pad colors / color-mode — that is
-               # what broke earlier VU attempts (they forced color-mode 2 and blanked the pads). Here
-               # the VU is PURE Traktor output gated Mod#6==1, so when Duplicate is OFF these mappings
-               # emit nothing and cannot affect the colors or any other mapping.
-               ("Ch01.CC.116", 0, MOD6, _cmad_setmod2(1))]
-            # Stereo master VU (Main L/R) painted on the FX-page (Group G) pads ONLY while Duplicate
-            # is latched on. Gated Mod#6==1 -> completely inert otherwise. Group H left untouched.
-            + _gate_list(_vu_overlay(84), MOD6, 1))
+               ("Ch01.CC.110", 1, 125,  _cmad_led_out(0))])  # Erase LED -> Deck A sync state
 devi_loops = build_device_raw("Maschine MK2 Performance", 0, perf_map)
 print(f"  Performance: {len(perf_map)} mappings across pad pages A-H")
 
