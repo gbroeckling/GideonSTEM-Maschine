@@ -532,21 +532,33 @@ FX_PRESETS_G2 = [  # page G2 (layer 1, Scene) — same effects, harder/wetter ba
 ]
 
 def _fxselect_mappings(layer):
-    """Group G (layer 0) / G2 (layer 1, Scene), Ch08 notes 84-99 — 16-effect FX1 selector, PLAN B:
-    each pad ONLY chooses the effect (362) + sets its params + drives the wet. The route (321), unit-on
-    (369) and effect on/off buttons (370/371/372) do NOT fire from the pad — they're pre-armed once
-    (Solo engage, or FX1 left on+routed in Traktor) so the select can never collide with the on (that
-    race was the intermittency). Press = effect chosen + wet full; RELEASE = wet 0 = off. The activator
-    is the wet (a value, Hold), held only on the pressed pad — no 16-pad conflict."""
+    """Group G (layer 0) / G2 (layer 1, Scene), Ch08 notes 84-99 — 16-effect FX1 selector, v3
+    SELF-CONTAINED PUNCH. Each pad does the WHOLE job on one press, so no pre-arm (Solo) is needed:
+      1. ARM FIRST — FX1 unit ON (369) + route Deck A & B -> FX1 (321), all Hold (momentary).
+      2. LOAD — select the effect (362, Direct) + set its params (366/367/368) + its on-button if a
+         button-effect (370/371/372, Hold).
+      3. PUNCH — wet to full (365, Hold). RELEASE tears everything back down (wet 0, unit off, unroute).
+    History: the route/on used to be stripped off the pad ('Plan B', relying on the Solo button)
+    because they 'never fired' — but that was the HasValueUI=0 bug (Traktor silently ignored OnOff
+    commands), NOT a timing race. `_cmad_fxon` fixes that (HasValueUI=1), so route/on fire now and
+    the pad can self-arm. Arm-first ordering also means the unit is live before the effect loads.
+    REQUIRES FX Unit 1 = SINGLE mode in Traktor (Prefs > Effects): the params/buttons below address
+    the single effect's own knobs/buttons; in Group mode 366-368 / 370-372 hit different slots."""
     presets = FX_PRESETS_G if layer == 0 else FX_PRESETS_G2
     m = []
     for i, (pos, k1, k2, k3, btn) in enumerate(presets):
         note = _note_lbl(84 + i, 7)
-        m.append((note, 0, 362, _gate(_cmad_fxselect(pos), MOD2, layer)))           # choose effect
-        for tid, val in ((366, k1), (367, k2), (368, k3)):                          # set its params (floats)
+        g = lambda cmad: _gate(cmad, MOD2, layer)
+        m.append((note, 0, 369, g(_cmad_fxon(0))))                  # 1a. FX1 unit ON (Hold)
+        m.append((note, 0, 321, g(_cmad_fxon(0))))                  # 1b. route Deck A -> FX1 (Hold)
+        m.append((note, 0, 321, g(_cmad_fxon(1))))                  # 1c. route Deck B -> FX1 (Hold)
+        m.append((note, 0, 362, g(_cmad_fxselect(pos))))           # 2a. load the effect (Direct)
+        for tid, val in ((366, k1), (367, k2), (368, k3)):         # 2b. its params (floats)
             if val is not None:
-                m.append((note, 0, tid, _gate(_cmad_fxval(0, val), MOD2, layer)))
-        m.append((note, 0, 365, _gate(_cmad_wet_gate(), MOD2, layer)))              # activator: wet full held, 0 on release
+                m.append((note, 0, tid, g(_cmad_fxval(0, val))))
+        if btn is not None:                                        # 2c. button-effect on (Hold)
+            m.append((note, 0, btn, g(_cmad_fxon(0))))
+        m.append((note, 0, 365, g(_cmad_wet_gate())))              # 3.  wet full held, 0 on release
     return m
 
 # --- Group G: stereo VU of MAIN OUTPUT (replaces Mixer FX) ---
