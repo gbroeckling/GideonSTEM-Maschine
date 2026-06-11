@@ -1347,40 +1347,77 @@ def patch_ncc(path):
     # each pad in its true hue AT REST (on==off => the idle color IS the hue) with no Traktor
     # output mapping needed - exactly how the group buttons glow. Each Group also moves to its
     # own MIDI channel (kills cross-page note overlap); Group B stays on Ch01.
+    import colorsys
     def _argb(r, g, b): return 0xFF000000 | (r << 16) | (g << 8) | b
-    # vivid NI 7-bit palette (channels 0-127)
-    BLUE   = _argb(0, 40, 127);   CYAN   = _argb(0, 110, 120); RED    = _argb(127, 0, 0)
-    GREEN  = _argb(0, 120, 28);   AMBER  = _argb(127, 64, 0);  ORANGE = _argb(127, 32, 0)
-    VIOLET = _argb(78, 0, 127);   MAGENTA= _argb(127, 0, 88);  TEAL   = _argb(0, 120, 88)
-    WHITE  = _argb(96, 96, 96);   SKY    = _argb(0, 96, 127)
-
+    def _hsv(h, s=1.0, v=1.0):
+        """HSV (h in degrees) -> NI 7-bit ARGB. Used for spectrum / rainbow pages."""
+        r, g, b = colorsys.hsv_to_rgb((h % 360) / 360.0, s, v)
+        return _argb(round(r * 127), round(g * 127), round(b * 127))
+    def _dim(c, f):
+        """Scale an ARGB's brightness by factor f (keeps the hue, darkens it)."""
+        return _argb(round(((c >> 16) & 0xFF) * f), round(((c >> 8) & 0xFF) * f), round((c & 0xFF) * f))
     def _grad(c0, c1, n=8):
-        """Linear ARGB ramp from c0 to c1 over n steps (per-deck size gradient)."""
+        """Linear ARGB ramp from c0 to c1 over n steps."""
         ch = lambda x, s: (x >> s) & 0xFF
-        out = []
-        for i in range(n):
-            t = i / (n - 1)
-            out.append(_argb(round(ch(c0,16)*(1-t)+ch(c1,16)*t),
-                             round(ch(c0,8)*(1-t)+ch(c1,8)*t),
-                             round(ch(c0,0)*(1-t)+ch(c1,0)*t)))
-        return out
+        return [_argb(round(ch(c0,16)*(1-i/(n-1))+ch(c1,16)*(i/(n-1))),
+                      round(ch(c0,8)*(1-i/(n-1))+ch(c1,8)*(i/(n-1))),
+                      round(ch(c0,0)*(1-i/(n-1))+ch(c1,0)*(i/(n-1)))) for i in range(n)]
 
-    STEM  = [BLUE, RED, GREEN, AMBER]    # Drums, Bass, Other, Vocals (Traktor stem colors)
-    XPORT = [GREEN, RED, SKY, AMBER]     # Play, Cue, Sync, Flux
+    WHITE = _argb(110, 110, 110)
+    # Traktor stem colors (Drums / Bass / Other / Vocals)
+    DRUMS, BASS, OTHER, VOCALS = _argb(0, 40, 127), _argb(127, 0, 0), _argb(0, 120, 30), _argb(127, 64, 0)
 
-    # 16 colors per page (Pad1-8 = Deck B / bottom rows, Pad9-16 = Deck A / top rows).
-    PAGE_COLORS = {
-        'A': STEM + STEM + STEM + STEM,                    # per-stem x (mute,filter) x 2 decks
-        'B': _grad(BLUE, CYAN) + _grad(BLUE, CYAN),        # loop size: small blue -> large cyan
-        'C': _grad(AMBER, ORANGE) + _grad(AMBER, ORANGE),  # beatjump: small amber -> big orange
-        'D': [VIOLET] * 16,                                # remix grid
-        'E': [CYAN] * 16,                                  # key shift (reset pads overridden below)
-        'F': [TEAL] * 16,                                  # loop station
-        'G': [MAGENTA] * 16,                               # FX selector
-        'H': XPORT + XPORT + XPORT + XPORT,                # transport: play/cue/sync/flux
-    }
-    PAGE_COLORS['E'][4] = WHITE; PAGE_COLORS['E'][12] = WHITE   # key-0 reset pads stand out
+    # --- Per-page color schemes. Colors ENCODE function, not just decoration. ---------------
+    # Pad1-8 = Deck B (bottom rows), Pad9-16 = Deck A (top rows) — except D (4 remix slots)
+    # and G (16 FX) which are not deck-split.
 
+    # A — Stems: each stem its Traktor color; MUTE row full brightness, FILTER row dimmed (same
+    #     hue) so the two rows read apart at a glance. Layout/deck: Pad1-4 B-mute, 5-8 B-filter,
+    #     9-12 A-mute, 13-16 A-filter.
+    _stem = [DRUMS, BASS, OTHER, VOCALS]
+    _stem_dim = [_dim(c, 0.4) for c in _stem]
+    A = _stem + _stem_dim + _stem + _stem_dim
+
+    # B — Loops: beat-loop = GREEN (convention). Size small->large = lime -> teal gradient.
+    _loopgrad = _grad(_hsv(95, 1, 1), _hsv(165, 1, 1), 8)
+    B = _loopgrad + _loopgrad
+
+    # C — Beatjump: pad order per deck is -4 +4 -8 +8 -16 +16 -32 +32. BACK = warm (amber),
+    #     FORWARD = cool (cyan); brightness rises with jump size. Left column warm/back, right
+    #     cool/forward, brighter = bigger.
+    _cdeck = []
+    for f in (0.45, 0.62, 0.8, 1.0):           # 4, 8, 16, 32 beats
+        _cdeck.append(_hsv(32, 1, f))          # back  (warm amber)
+        _cdeck.append(_hsv(195, 1, f))         # fwd   (cool cyan)
+    C = _cdeck + _cdeck
+
+    # D — Remix 4x4 (Deck C): Pad1-4 slot1, 5-8 slot2, 9-12 slot3, 13-16 slot4. Each slot its
+    #     own hue; cells 1-4 within a slot rise in brightness. Reads as 4 colored slot-blocks.
+    D = []
+    for slot_hue in (0, 38, 120, 215):         # red, amber, green, blue
+        for cell_f in (0.5, 0.67, 0.83, 1.0):
+            D.append(_hsv(slot_hue, 1, cell_f))
+
+    # E — Key shift: CHROMATIC RAINBOW. Each semitone gets its own hue (pitch = hue wheel);
+    #     the key-0 RESET pad is WHITE so home base stands out. Per deck: -4..+3 semitones.
+    E = []
+    for _d in range(2):
+        for s in (-4, -3, -2, -1, 0, 1, 2, 3):
+            E.append(WHITE if s == 0 else _hsv(s * 30, 1, 1))
+
+    # F — Loop station: Pad1-4 = capture A/B/C/D = WHITE (saved-loop convention, the "record"
+    #     action stands out); Pad5-16 = 12 recall cells = cyan brightness gradient.
+    F = [WHITE] * 4 + _grad(_hsv(185, 1, 0.5), _hsv(185, 1, 1), 12)
+
+    # G — FX selector (16 effects): a full 16-hue SPECTRUM so every effect has its own learnable
+    #     color identity (find an effect by color, not by reading a label).
+    G = [_hsv(i * (360 / 16), 1, 1) for i in range(16)]
+
+    # H — Transport: Play=green, Cue=red, Sync=blue, Flux=amber (convention), repeated per deck.
+    _xport = [_hsv(120, 1, 1), _hsv(0, 1, 1), _hsv(215, 1, 1), _hsv(35, 1, 1)]
+    H = _xport + _xport + _xport + _xport
+
+    PAGE_COLORS = {'A': A, 'B': B, 'C': C, 'D': D, 'E': E, 'F': F, 'G': G, 'H': H}
     PAGE_CH = {'A': 2, 'B': None, 'C': 3, 'D': 4, 'E': 5, 'F': 6, 'G': 7, 'H': 8}  # B stays Ch01
     PAGE_ORDER = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
