@@ -290,10 +290,15 @@ _LOOP2317_TEMPLATE = bytes.fromhex(
 # 8 sizes per deck, in pad order: 1/8,1/4,1/2,1,2,4,8,16 beats -> indices 2..9.
 _LOOP_SIZES = [2, 3, 4, 5, 6, 7, 8, 9]
 
-def _cmad_loop_size(deck, size_index):
+def _cmad_loop_size(deck, size_index, interaction=None):
+    """Loop Size Select+Set (TID 2317). interaction (CMAD @8): default = the template's Direct
+    (3) = tap sets a loop that LATCHES on (page B). Pass interaction=2 (Hold) for a MOMENTARY
+    loop ROLL (page B2): the loop is active only while the pad is held and exits on release."""
     b = bytearray(_LOOP2317_TEMPLATE)
     b[12:16] = struct.pack('>i', deck)
     b[44:48] = struct.pack('>I', size_index)
+    if interaction is not None:
+        b[8:12] = struct.pack('>I', interaction)
     assert len(b) == 120
     return bytes(b)
 
@@ -418,14 +423,14 @@ def _gate_list2(mappings, m1, v1, m2, v2):
 
 def _looproll_b2_mappings():
     """B2 — the Scene-shifted layer of page B (Ch01 notes 24-39, the SAME pads as the B loops
-    layer). Fixed-size loop ROLL, sizes 1/16..8 beats (indices 1-8); bottom half Deck B, top
+    layer). MOMENTARY loop ROLL, sizes 1/16..8 beats (indices 1-8); bottom half Deck B, top
     Deck A. Gated to Mod#2==1 by the caller so it only fires when the Scene light is on.
-    TODO (Garry): B (set loops) and B2 (loop roll) are too similar — make them more distinct in a
-    future rev (e.g. B = set-and-hold loops, B2 = momentary loop rolls, or a different size set)."""
+    Now DISTINCT from B: B taps a loop that LATCHES on; B2 uses Hold (interaction=2) so the loop
+    is active only WHILE the pad is held and exits on release — the classic loop-roll feel."""
     m = []
     for base, deck in ((24, 1), (32, 0)):
         for i in range(8):
-            m.append((_note_label(base + i), 0, 2317, _cmad_loop_size(deck, i + 1)))
+            m.append((_note_label(base + i), 0, 2317, _cmad_loop_size(deck, i + 1, interaction=2)))
     return m
 
 
