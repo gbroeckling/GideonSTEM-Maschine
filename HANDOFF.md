@@ -4,7 +4,7 @@
 state*, how to build/test/publish, the architecture decisions that actually matter, and
 the open issues. Other docs in this folder are older and partly stale — see §10.
 
-Last updated: 2026-05-28. Current release: **v0.4-alpha** (100% original — no third-party
+Last updated: 2026-06-16. Current release: **v0.7-alpha** (100% original — no third-party
 mapping data), live at **https://maps.djtechtools.com/mappings/22496**.
 
 ---
@@ -21,8 +21,10 @@ Two deliverables, both required by the end user:
 - `gideonSTEMsMaster.ncc` — the NI Controller Editor configuration (load in CE).
 
 The **release** copies are renamed `GideonSTEM-Maschine.tsi/.ncc` and zipped with the
-end-user `README` into `GideonSTEM-Maschine_v0.1-alpha.zip` (folder
-`release_GideonSTEM-Maschine/`).
+end-user `README`, TID catalog, and diagrams into `GideonSTEM-Maschine_v<ver>-alpha.zip`
+(currently `_v0.7-alpha.zip`) from the folder `release_GideonSTEM-Maschine/`. The zip lives at
+the repo root and is gitignored (build artifact); only the renamed binaries in the release
+folder are committed.
 
 ---
 
@@ -146,7 +148,7 @@ files move on a **USB key (drive `F:`)**.
 2. Carry the key to the test machine.
 3. **Controller Editor:** File → Open Configuration → the `.ncc`.
 4. **Traktor:** Preferences → Controller Manager → Import the `.tsi`; then **assign In-Port
-   AND Out-Port** to the MK2 for **all three devices** (LEDs/VU need the Out-Port).
+   AND Out-Port** to the MK2 for **all three devices** (LED feedback needs the Out-Port).
 
 ---
 
@@ -176,9 +178,10 @@ assembly** (each line is `_gate_list(fn(), MOD2, layer)`). 24 pad pages total.
 `_patternctrl_mappings(3,…)` (B3=FX4), `_drummix_c3` (C3), `_toneplay_d3` (D3),
 `_sounddesign_e3` (E3), `_gate_f3` (F3), `_macros_g3` (G3), `_patternpick_h3` (H3).
 
-> **Dead code:** `_looproll_mappings` and `_vu_mappings` are NO LONGER in `perf_map` (loop-roll
-> moved to B2; the VU page was replaced by the G FX selector). They remain in the file but are
-> never assembled — safe to delete in a cleanup pass.
+> **History:** `_looproll_mappings` (loop-roll moved to B2) and the whole VU stack
+> (`_vu_mappings`/`_vu_overlay`/`_cmad_vu`/`_VU_TEMPLATE`) have been **deleted** — the G "VU page"
+> is now the G FX selector, and the MK2 pad VU was proven unworkable (see §8). No dead VU/loop-roll
+> code remains.
 
 Transport/nav (Ch01 CCs): Play 108, Restart 104 (jumps start on **A and B**), Rec 109,
 Grid 107 (Toggle Last Focus 2588), Step 105/106 (beatjump ∓4), Tempo 3 (Load Deck A 3076),
@@ -186,7 +189,7 @@ Enter 100 (Load Deck B), Dial push 102 (Load focused), Master 98/99 (browser scr
 Dial turn 101 (browser scroll, encoder), Browse 87 (toggle browser view 4209).
 Display knobs k1–8 = stems (CC vary per page); k1=Drums k2=Bass k3=Other k4=Vocals, k5–8 = 2nd deck.
 
-The CMAD templates for 2317/2380/402/VU/scroll are **cloned byte-for-byte from working DJTT
+The CMAD templates for 2317/2380/402/scroll are **cloned byte-for-byte from working DJTT
 mappings** and only the deck (offset 12) and value (offset 44) are patched — see the `_*_TEMPLATE`
 hex constants. Don't hand-build these.
 
@@ -223,17 +226,21 @@ NOT stored here). Authenticated session uses `djtt/cookies.txt` + `curl --ssl-no
 ---
 
 ## 8. Open issues (alpha)
-- **Group G / G2 FX-select pads — NOT working yet (TOP FIX).** Pressing a G pad should load the
-  effect into FX1 (362), set params, route it (321) + switch the unit on (369), and swell the
-  wet (365). The select + on/route do not fire together reliably. Root cause (per session notes):
-  a **timing race** when select + route + unit-on fire on the same press — NOT an encoding bug
-  (proven by "works rarely"). Current build ("Plan B") removed route/on from the pad and pre-arms
-  them via the **Solo button (CC118 = FX1 engage)**, leaving the pad to only select + wet — still
-  not confirmed working. Garry's latest direction: fire the on/route + select **on Group-G page
-  select** instead of on the pads. Blocker to verify first: with `handleGroupControls` removed
-  (§3), the Group buttons do native switching and may NOT emit a host-mappable CC — confirm in
-  Traktor's Controller Manager (Learn) whether Group G sends a CC before wiring it. See the
-  `_fxselect_mappings`, `_cmad_wet_gate`, and the CC118 block in `perf_map`.
+- **Group G / G2 FX-select pads — reworked to v3 "self-contained punch"; needs hardware
+  confirmation.** Pressing a G pad does the WHOLE job on one press: arm FX1 (unit on 369 + route
+  Deck A/B 321, Hold) → load the effect (select 362 + params 366/367/368) → swell wet to full
+  (365, Hold); release tears it all back down. The earlier "Plan B" (strip route/on off the pad,
+  pre-arm via the Solo button CC118) and the "timing race" theory are **superseded**: the real
+  cause was the **`HasValueUI=0` bug** — Traktor silently ignored the OnOff commands. `_cmad_fxon`
+  (HasValueUI=1) fixes that, so route/on now fire and the pad self-arms (no Solo pre-arm needed).
+  REQUIRES FX Unit 1 = SINGLE mode in Traktor (Prefs > Effects). See `_fxselect_mappings` /
+  `_cmad_fxon` / `_cmad_wet_gate` in the build. Confirm the full punch on hardware.
+- **Group G pad VU meter — ATTEMPTED AND REMOVED (2026-06-16), do not retry on MK2.** A
+  Duplicate-toggled (Mod#6) stereo pad VU was built but does **nothing** on the MK2: the hardware
+  does not light its performance pads from host MIDI (every working LED here is a button/encoder
+  CC LED; pad colors are static, set controller-side). Pad-VU is only proven on the Maschine
+  **Mikro** (refs #10371/#3589). Removed for good. Only revisit with an actual third-party MK2
+  `.tsi` that demonstrably lights pads as a meter.
 - **Drum Pattern Player (A3–H3)** — routing/auto-arm in place; per-pad pattern/vol/pitch values
   built from verified FX-unit controls but want a full hardware pass (esp. 365 = Decay vs Volume
   label, and the extrapolated pattern-position floats in `_cmad_fxpattern`).
@@ -258,7 +265,7 @@ NOT stored here). Authenticated session uses `djtt/cookies.txt` + `curl --ssl-no
 ## 9. File inventory
 - `build_gideonStemsMaster.py` — the generator (source of truth for the mapping).
 - `gideonSTEMsMaster.tsi` / `.ncc` — current build (working filenames).
-- `release_GideonSTEM-Maschine/` + `GideonSTEM-Maschine_v0.1-alpha.zip` — release bundle.
+- `release_GideonSTEM-Maschine/` + `GideonSTEM-Maschine_v0.7-alpha.zip` — release bundle (zip is gitignored).
 - `README_gideonSTEMsMaster.md` — **end-user** guide (also shipped in the zip as README.md).
 - `Reybans_Maschine_MK2_reference.tsi` — **no longer used by the build** (v0.2 is self-
   contained). Third-party; **exclude from any public repo**. Safe to delete or archive.
