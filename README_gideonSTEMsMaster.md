@@ -377,6 +377,8 @@ please get in touch and it will be corrected.)*
 ---
 
 ## 17. Version history
+- **v0.7-alpha** — current published build (DJTechTools #22496); carries the v0.5 / v0.6
+  fixes below, with continued on-hardware validation and polish.
 - **v0.1-alpha** — first public alpha. Stems (2-deck) + 8 pad pages + transport + browser +
   VU. Browse knob bidirectional. Full Mix is the default startup screen.
 - **v0.1.1-alpha** — added labeled layout diagrams to the download.
