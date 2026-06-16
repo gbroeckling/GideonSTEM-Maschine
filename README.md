@@ -32,10 +32,11 @@ Requires Python 3 + Pillow (for the diagram scripts). Self-contained — reads o
 `gideonSTEMsMaster.ncc` (committed) and writes the `.tsi` + `.ncc`.
 
 ## Status
-**Alpha (v0.4).** Core stems / pads / transport / browse and the Scene + Pattern layers
-are on hardware; the **Group G FX-select pads do not work reliably yet** (top fix in
-progress), and some LED/metering outputs are pending hardware confirmation. See
-`HANDOFF.md` §8.
+**Alpha (v0.7).** Two-deck stems mixing, all 24 pad pages, the 4-unit FX (incl. Group G
+FX arming, wired in v0.5), the Loop Recorder, browse and transport are on hardware across
+the Base / Scene / Pattern layers. Remaining work is LED / metering feedback and per-page
+polish. Full change log is on the DJTechTools listing
+(https://maps.djtechtools.com/mappings/22496); maintainer notes in `HANDOFF.md`.
 
 ## License
 **GPL‑3.0** (see `LICENSE`) — © 2026 Garry Broeckling. The mapping is original work;
