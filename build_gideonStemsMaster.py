@@ -555,60 +555,15 @@ def _fxselect_mappings(layer):
         m.append((note, 0, 365, g(_cmad_wet_gate())))              # 3.  wet full held, 0 on release
     return m
 
-# --- Group G: stereo VU of MAIN OUTPUT (replaces Mixer FX) ---
-# 8-level bar per channel. Left = Main Level L (2704), Right = Main Level R (2705).
-# LED output to the pad B-LED on Ch03 (ch2), pad notes 84-99. Cumulative bar: level k lights
-# when Main level >= k/8. Pad fill order (user spec):
-#   L = pads 2,6,10,14,1,5,9,13 (levels 1..8);  R mirrored = 3,7,11,15,4,8,12,16.
-_VU_LEFT  = [2, 6, 10, 14, 1, 5, 9, 13]
-_VU_RIGHT = [3, 7, 11, 15, 4, 8, 12, 16]
-_VU_LEVEL_COLOR = {1: 4, 2: 5, 3: 6, 4: 3, 5: 2, 6: 7, 7: 1, 8: 1}  # mode1: 1-6 varied non-red, 7-8 red
-
-# Metering LED-output CMAD, cloned byte-for-byte from working Maschine VU mappings
-# (#10371 + #3589, identical). This signature makes a meter actually MOVE: CtrlType=LED,
-# Inter=Output, @40=2, range-type fields=2, LedBlend=1 (fade), Resolution=0x3d800000.
-# (My earlier VU used the button on/off signature -> Traktor treated it as binary = no move.)
-# Only the per-segment band MinCtrl@80 / MaxCtrl@88 is patched.
-_VU_TEMPLATE = bytes.fromhex(
-    '000000040000ffff000000080000000000000000000000000000000040a000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000023ecccccd000000023f000000000000000000007f0000000000000001000000023d80000000000000')
-
-def _cmad_vu(level, deck=0):
-    """VU segment for a deck-level meter (TID 2713 = Deck Post-Fader Level L+R), built on the
-    PROVEN `_cmad_led_out` output template — the SAME signature that drives the working stem-mute
-    LEDs on this hardware (ControllerType=LED, Interaction=Output, LedBlend=threshold). Earlier the
-    VU used a different, unverified "metering" template (_VU_TEMPLATE, fade blend) that may not
-    render on the MK2; this rides the output path known to light. The pad turns on when the deck's
-    post-fader level crosses (level-1)/8 -> a binary 8-segment bar. deck @12, threshold @80."""
-    b = bytearray(_cmad_led_out(0))                   # proven LED-output template (drives mute LEDs)
-    b[12:16] = struct.pack('>i', deck)                # which deck's level drives this segment
-    b[80:84] = struct.pack('>f', (level - 1) / 8.0)   # LedMinControllerRange = this segment's threshold
-    assert len(b) == 120
-    return bytes(b)
-
-def _vu_mappings():
-    """Group G stereo VU of MAIN output. Main L (2704) -> left pads, Main R (2705) -> right.
-    Drives BOTH pad LED variants per pad — Ch03 (PadNB) and Ch01 (PadNH) — with the metering
-    recipe, since on the MK2 the visible/responsive LED variant is uncertain (#10371 used both:
-    Ch01 for color, Ch03 for level). Whichever variant responds, the bar fills with level."""
-    return _vu_overlay(84)
-
-VU_TID = 2713   # Deck Post-Fader Level (L+R) — the REAL level meter. (The old 2704 was "Master
-                # Out CLIP (L+R)", a clip light that only fires when clipping — why the VU was dark.)
-
-def _vu_overlay(base):
-    """Per-deck VU on the 16 pads of one page (notes base..base+15): LEFT two columns = Deck A
-    post-fader level, RIGHT two = Deck B level; 8 rising-threshold segments per side. Drives BOTH
-    brightness/hue LED channels (Ch03 PadNB + Ch01 PadNH) so whichever responds fills the bar.
-    Used as a Duplicate-toggled overlay (gated Mod#6==1 by the caller): only paints while Duplicate
-    is latched on; otherwise the page's colors show."""
-    m = []
-    for deck, pads in ((0, _VU_LEFT), (1, _VU_RIGHT)):   # Deck A left, Deck B right
-        for i, pad in enumerate(pads):
-            note = base + (pad - 1)
-            cmad = _cmad_vu(i + 1, deck=deck)
-            m.append((_note_lbl(note, 2), 1, VU_TID, cmad))   # Ch03 PadNB, level 1..8
-            m.append((_note_lbl(note, 0), 1, VU_TID, cmad))   # Ch01 PadNH, level 1..8
-    return m
+# --- Group G VU: REMOVED 2026-06-16 ---
+# A moving VU on the MK2 PADS is not achievable. The pads do not render a host-fed level meter:
+# every working LED in this mapping is a button/encoder CC LED (mute, filter, play, sync) — not one
+# performance pad is lit by Traktor; the pad colors are STATIC, set controller-side in the NCC. Pad
+# VU is only proven on the Maschine MIKRO (refs #10371/#3589), never the MK2. A prior session reached
+# this conclusion, ripped it out, and left a warning (see patch_ncc); the Jun-11 re-add
+# (_vu_overlay / _cmad_vu / Mod#6 / Duplicate toggle) did absolutely nothing on hardware and is now
+# deleted for good. Group G stays a normal colored FX-selector page. Do NOT re-add without an actual
+# third-party MK2 .tsi that demonstrably lights pads as a meter.
 
 def _transport_mappings():
     """Group H (Ch09, notes 96-111). Play, Cue, Sync, Flux (x2 to fill 8 pads)."""
@@ -931,7 +886,7 @@ def _cmad_fxon(field, interaction=2):
 MOD3 = 2550   # Traktor Modifier #3 — FX1 "engage" state (0 = off, 1 = engaged)
 MOD4 = 2551   # Traktor Modifier #4 — Dial mode: 0 = browse, 1 = volume (Volume CC7), 2 = swing-skip (Swing CC9 held)
 MOD5 = 2552   # Traktor Modifier #5 — swing-skip A/B target (1 = Deck A, 0 = Deck B), flips each Swing press
-MOD6 = 2553   # Traktor Modifier #6 — VU-meter overlay (1 = on). Toggled by the Duplicate button (CC116).
+# MOD6 (2553) was the VU-meter overlay toggle — removed with the dead MK2 pad-VU (2026-06-16).
 # Continuous SEEK command for the responsive Dial-skip (replaces laggy Beatjump 2380, which is a
 # Hold/Enum trigger and accumulates on a relative encoder). TID 103 = "Seek Position (Deck Common)",
 # a FloatInCommand<FloatRangeRelative> — confirmed authoritative via cmdr KnownCommands.cs, and seen
@@ -1459,10 +1414,8 @@ def patch_ncc(path):
             return led
         return re.sub(r'<led version="1" id="Pad(?P<pid>\d+)[BHS]">.*?</led>', _repl, block, flags=re.S)
 
-    # G page also hosts the Duplicate-toggled VU: its pads need a DARK color-off so the level
-    # value renders as a fading bar (off==on shows no movement). At rest (value 127) they still
-    # show color-on = the full FX spectrum, so the FX page looks unchanged until the VU drives it.
-    VU_OFF = [_dim(c, 0.12) for c in PAGE_COLORS['G']]
+    # (Group G used to carry a dark color-off for a Duplicate-toggled pad VU — removed 2026-06-16,
+    # the MK2 can't render a host-fed pad meter. G is now colored like any other page.)
 
     for idx, letter in enumerate(PAGE_ORDER):
         nxt = PAGE_ORDER[idx + 1] if idx + 1 < len(PAGE_ORDER) else None
@@ -1475,11 +1428,9 @@ def patch_ncc(path):
         if ch is not None:
             blk = re.sub(r'(<pad subtype="trigger"[^>]*>\s*<note>\d+</note>\s*<channel>)0(</channel>)',
                          rf'\g<1>{ch}\g<2>', blk)            # re-channel input pads
-        blk = _color_pad_leds(blk, PAGE_COLORS[letter],
-                              off_colors=VU_OFF if letter == 'G' else None)   # G: dark off for VU
+        blk = _color_pad_leds(blk, PAGE_COLORS[letter])
         content = content[:g0] + blk + content[g1:]
-        print(f"  [NCC] Group {letter} -> Ch{(ch + 1) if ch is not None else 1:02d}, ARGB pad colors"
-              + (" (+dark off for VU)" if letter == 'G' else ""))
+        print(f"  [NCC] Group {letter} -> Ch{(ch + 1) if ch is not None else 1:02d}, ARGB pad colors")
 
     # --- MK1 PORT: re-channel the MK1 ("Maschine Controller") pads exactly like the MK2 so
     # all 8 pad pages work with the UNCHANGED TSI. MK1 sends the same transport CCs (Play 108,
@@ -1763,15 +1714,10 @@ perf_map = (
                ("Ch01.CC.110", 0, 125,  _cmad_btn(2, 2)),    # Deck C Sync (Hold)
                ("Ch01.CC.110", 0, 125,  _cmad_btn(3, 2)),    # Deck D Sync (Hold)
                ("Ch01.CC.110", 1, 125,  _cmad_led_out(0)),   # Erase LED -> Deck A sync state
-               # Duplicate (CC116) = VU-meter overlay toggle (Mod#6). NCC keeps Duplicate as a
-               # toggle so its own LED latches on while active. Pure Traktor OUTPUT gated Mod#6==1
-               # (does NOT touch NCC colors). Now driven by the CORRECT level meter (2713 Deck
-               # Post-Fader Level L+R) — the prior 2704 was a clip indicator, hence always dark.
-               ("Ch01.CC.116", 0, MOD6, _cmad_setmod2(1))]
-            # Per-deck VU (Deck A left / Deck B right) on the FX-page (G) pads, only while Duplicate
-            # is latched on. Gated Mod#6==1 -> inert otherwise. Group H untouched. The G pads carry
-            # a dark color-off (set in patch_ncc) so the level value actually renders as a meter.
-            + _gate_list(_vu_overlay(84), MOD6, 1))
+               # Duplicate (CC116) is intentionally UNMAPPED. It used to toggle a Group G pad VU
+               # (Mod#6) — removed 2026-06-16: the MK2 can't render a host-fed pad meter (only the
+               # Maschine Mikro can; refs #10371/#3589). The button is now free for reuse.
+               ])
 devi_loops = build_device_raw("Maschine MK2 Performance", 0, perf_map)
 print(f"  Performance: {len(perf_map)} mappings across pad pages A-H")
 
